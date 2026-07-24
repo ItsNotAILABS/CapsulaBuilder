@@ -1,30 +1,27 @@
-# MonadBuilder+ · THESIS Research Series
+# MonadBuilder+ and THESIS Research Series
 
-This directory is the public research lane for systems implemented in this repository. Every release must separate implemented mechanisms, measured evidence, design hypotheses, limitations, and future work.
+This directory is the public research lane for systems implemented or specified in this repository. Every release separates implemented mechanisms, measured evidence, design hypotheses, limitations, and future work.
 
-## Release sequence
+## Current full papers
 
-1. **Digital-Twin Wallets for Governed AI Systems**  
-   Public wallet identity, custody separation, observable balance twins, policy evaluation, owner signing, and receipt-backed synchronization.
+1. [Two-Surface Sovereign Architecture](papers/I-TWO-SURFACE-SOVEREIGN-ARCHITECTURE.md) - browser creation and local authority as two coordinated surfaces of one system.
+2. [Governed Agent Execution](papers/II-GOVERNED-AGENT-EXECUTION.md) - policy-mediated tools, exact-digest approvals, external signing, namespaces, and hash-linked receipts.
+3. [Persistent Synthetic Cognition Infrastructure](papers/III-PERSISTENT-SYNTHETIC-COGNITION-INFRASTRUCTURE.md) - canonical state, recurrence, consequence, homeostasis, adaptation, identity, and longitudinal evaluation.
 
-2. **Continuous Synthetic Users as Operational Proof**  
-   Persistent personas that exercise live product routes, chains, wallets, agents, Cloudflare edge services, and failure paths on a recurring cadence.
+## Continuing release sequence
 
-3. **THESIS: A Governance Control Plane for AI-Native Applications**  
-   Programmable law, agent proposals, explicit rejection, Company OS coordination, controlled execution, and cryptographic receipts.
-
-4. **Edge-Governed Multichain Application Infrastructure**  
-   Cloudflare-native delivery, Monad execution, Ethereum L1 gateway verification, model routing, and state boundaries.
-
-5. **Receipt-Centered Evaluation of Autonomous Software**  
-   Evidence-first benchmarking for systems whose safety properties depend on longitudinal operation rather than isolated demos.
+4. **Digital-Twin Wallets for Governed AI Systems** - public wallet identity, custody separation, observable balance twins, policy evaluation, owner signing, and receipt-backed synchronization.
+5. **Continuous Synthetic Users as Operational Proof** - persistent personas that exercise product routes, chains, wallets, agents, edge services, and failure paths on a recurring cadence.
+6. **THESIS: A Governance Control Plane for AI-Native Applications** - programmable law, agent proposals, explicit rejection, Company OS coordination, controlled execution, and cryptographic receipts.
+7. **Edge-Governed Multichain Application Infrastructure** - Cloudflare-native delivery, Monad execution, Ethereum gateway verification, model routing, and state boundaries.
+8. **Receipt-Centered Evaluation of Autonomous Software** - evidence-first benchmarking for systems whose safety properties depend on longitudinal operation rather than isolated demos.
 
 ## Publication contract
 
-Each paper should include:
+Each paper includes or clearly identifies:
 
 - abstract and problem statement;
-- implemented architecture and threat model;
+- architecture and threat model;
 - formal state, transition, or policy model where appropriate;
 - repository evidence and reproducible test procedure;
 - empirical results only when receipts or benchmark output support them;
@@ -38,5 +35,11 @@ Each paper should include:
 - `experimental`: implemented but not sufficiently evaluated;
 - `proposed`: design work not yet shipped;
 - `retired`: historical infrastructure no longer part of production.
+
+## Reproducibility contract
+
+A future empirical result should include the hypothesis, baseline, dataset or generation method, environment, source commit, seed policy, metrics, statistical method, raw and processed artifacts, limitations, negative results, hash manifest, and generation receipt.
+
+Until DOI-backed releases are issued, citations should include repository, paper title, authoring organization, source commit, and access date. DOI, archive, deployment, performance, or audit badges must not be added until the corresponding external record exists.
 
 The research series is part of the product proof system, not marketing decoration.

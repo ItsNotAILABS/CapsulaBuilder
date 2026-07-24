@@ -1,0 +1,34 @@
+name: Platform Maturity and Research Gate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  maturity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate repository maturity
+        run: python scripts/validate_platform_maturity.py --write-receipt proofroom/platform-maturity-receipt.json
+      - name: Validate MCP Spine
+        working-directory: artifacts/mcp-bridge
+        run: |
+          npm run typecheck
+          npm test
+          npm run proof
+      - name: Upload proof receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: platform-maturity-proof
+          path: |
+            proofroom/platform-maturity-receipt.json
+            artifacts/mcp-bridge/receipts/**
+          if-no-files-found: warn
