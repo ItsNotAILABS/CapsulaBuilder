@@ -29,41 +29,15 @@ There is no third public application.
 
 ## MonadBuilder+
 
-MonadBuilder+ is designed to contain:
-
-- AI application generation and visual editing;
-- templates, Gallery, Learn, and AI Studio;
-- wallet linking, normalized wallet identity, wallet twins, and Agent Cards;
-- agent credentials and ReceiptChain proof;
-- smart-contract creation, analysis, verification, deployment, and transaction decoding;
-- Monad-first tooling with EVM interoperability;
-- MCP Server Bridge status and discovery;
-- Scientific Experiment Lab workflows;
-- PARRALAX market intelligence, strategy research, gas analysis, DEX and liquidity analysis, treasury simulation, and governed execution planning;
-- GitHub import, publishing, release automation, and deployment controls;
-- receipts, manifests, and proof exploration.
+MonadBuilder+ is designed to contain AI application generation, visual editing, templates, Gallery, Learn, AI Studio, wallet identity, wallet twins, Agent Cards, contract tooling, Monad-first EVM interoperability, MCP discovery, Scientific Experiment Lab workflows, PARRALAX market intelligence, GitHub release automation, deployment controls, receipts, manifests, and proof exploration.
 
 ## THESIS Agent Desktop
 
-The desktop source is now named **THESIS Agent Desktop**. It is designed as the sovereign operator surface for:
-
-- starting, stopping, and inspecting the local MCP Spine;
-- discovering local servers and governed tools;
-- capability permissions and confirmation queues;
-- approval or denial of sensitive actions;
-- NOVA paired-device management;
-- local and cloud model routing;
-- Scientific Lab execution and MESIE validation;
-- NEXUS packaging and proof generation;
-- PARRALAX market tools and blockchain adapters;
-- GitHub and Cloudflare controls;
-- receipt verification, bridge logs, namespaces, offline operation, updates, and releases.
+THESIS Agent Desktop is the sovereign operator surface for starting and inspecting the local MCP Spine, discovering governed tools, managing permissions and confirmation queues, approving or denying sensitive actions, managing NOVA paired-device state, routing local and cloud models, running scientific and MESIE validation, packaging through NEXUS, inspecting PARRALAX and blockchain adapters, controlling GitHub and Cloudflare integrations, and verifying receipts, namespaces, offline state, updates, and releases.
 
 The renderer is sandboxed, context-isolated, and does not store wallet private keys.
 
 ## Shared internal technology
-
-The following are platform internals rather than additional public products:
 
 `MCP Spine` · `Triple-MCP` · `NOVA Runtime` · `NEXUS` · `Loom Cluster` · `MESIE` · `Virtual Processor` · `PARRALAX` · `LiveVault` · `Scientific Experiment Lab` · `Medina Protocol` · blockchain adapters · Cloudflare federation · GitHub release automation
 
@@ -108,6 +82,33 @@ npm run dev
 
 Cross-platform packaging is configured for Windows, macOS, and Linux. Source packaging configuration is not the same as a signed or notarized production release.
 
+## Repository maturity system
+
+The public maturity contract and operator documentation are now first-class repository artifacts:
+
+- [`docs/PRODUCTION.md`](docs/PRODUCTION.md) - evidence levels, production invariants, release gates, and proofroom requirements;
+- [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) - local operation, federation requirements, packaging, rollback, and deployment classification;
+- [`docs/SECURITY_AND_AUTHORITY_MODEL.md`](docs/SECURITY_AND_AUTHORITY_MODEL.md) - trust zones, threats, wallet boundaries, federation, and incident classes;
+- [`docs/OPERATOR_BOUNDARY.md`](docs/OPERATOR_BOUNDARY.md) - start, approval, stop, and incident-response discipline;
+- [`scripts/validate_platform_maturity.py`](scripts/validate_platform_maturity.py) - deterministic repository, claim, security, manifest, and research validation;
+- [`.github/workflows/platform-maturity.yml`](.github/workflows/platform-maturity.yml) - CI proof gate and receipt artifact.
+
+Run the maturity gate locally:
+
+```bash
+python scripts/validate_platform_maturity.py --write-receipt proofroom/platform-maturity-receipt.json
+```
+
+## Research corpus
+
+The repository now carries a full public research layer:
+
+1. [Two-Surface Sovereign Architecture](research/papers/I-TWO-SURFACE-SOVEREIGN-ARCHITECTURE.md)
+2. [Governed Agent Execution](research/papers/II-GOVERNED-AGENT-EXECUTION.md)
+3. [Persistent Synthetic Cognition Infrastructure](research/papers/III-PERSISTENT-SYNTHETIC-COGNITION-INFRASTRUCTURE.md)
+
+The papers distinguish implemented source, validated evidence, architecture proposals, hypotheses, deployment claims, and independent assessment. They do not use research language to imply external audit, consciousness, financial performance, or unrestricted authority.
+
 ## Existing repository systems
 
 ```text
@@ -116,13 +117,14 @@ artifacts/api-server/      Node API and service gateway
 artifacts/mcp-bridge/      Governed MCP Spine
 artifacts/monad-mobile/    Legacy NOVA companion prototype
 engine/                    THESIS Python runtime and CLI
- desktop/                   THESIS Agent Desktop
+desktop/                   THESIS Agent Desktop
 contracts/                 Solidity and Foundry contracts
 edge/                      Cloudflare gateway source
 lib/                       Shared TypeScript and database packages
 polyglot/                  Shared execution engines
 receipts/                  Runtime and deployment evidence
 docs/                      Architecture and release documentation
+research/                  Public technical papers
 .github/workflows/         Validation, packaging, and release gates
 ```
 
@@ -134,13 +136,14 @@ PARRALAX must not silently receive unrestricted wallet or trading authority. Age
 
 ## Current source status
 
-Implemented in this repository or this consolidation branch:
+Implemented in this repository:
 
 - MonadBuilder+ web source, THESIS backend, contracts, receipts, and release workflows;
-- merged desktop alpha from PR #11, now being consolidated under the THESIS Agent Desktop name;
-- MCP Spine package, local HTTP control surface, tool registry, policy boundary, approval queue, receipt chain, source gate, and client configuration example;
-- THESIS desktop MCP lifecycle and approval controls;
-- canonical two-product manifest and legacy companion classification.
+- THESIS Agent Desktop source and packaging configuration;
+- MCP Spine local HTTP control surface, tool registry, policy boundary, approval queue, receipt chain, source gate, and client configuration;
+- desktop MCP lifecycle and approval controls;
+- canonical two-product manifest and legacy companion classification;
+- production maturity, deployment, security, operator, CI proof, and research layers.
 
 Not claimed as complete by this README:
 
@@ -156,7 +159,7 @@ Not claimed as complete by this README:
 ## Fixed production order
 
 1. Complete and validate the shared MCP Spine.
-2. Consolidate the README and THESIS Agent Desktop naming.
+2. Consolidate README and THESIS Agent Desktop naming.
 3. Wire MonadBuilder+ to MCP, Scientific Lab, crypto, PARRALAX, and GitHub.
 4. Wire THESIS Agent Desktop to lifecycle, approvals, adapters, and receipts.
 5. Deploy the authenticated Cloudflare federation gateway.
