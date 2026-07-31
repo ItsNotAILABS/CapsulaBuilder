@@ -52,6 +52,16 @@ from .trading import (
     update_limits,
     update_policy,
 )
+from .broker_readiness import broker_status, get_broker, list_brokers
+from .live_gate import approval_packet, denial, gate_status, submit_evidence
+from .agent_vault import (
+    add_connector,
+    create_vault,
+    get_vault,
+    ledger_transfer,
+    list_vaults,
+    register_agent,
+)
 from .ai_node import ai_chat, ensure_ai_node, node_status, promote_request
 from .sandbox import (
     create_sandbox,
@@ -1417,8 +1427,10 @@ class TicketIn(BaseModel):
     venue_id: str
     pair: str
     side: str
+    order_type: str = "limit"
     qty: float = Field(gt=0)
     limit_price: float = Field(gt=0)
+    stop_price: float = 0.0
     slippage_bps: int = 30
     leverage_bps: int = 10000
     rationale: str = ""
@@ -1448,8 +1460,10 @@ def desk_ticket(body: TicketIn):
             venue_id=body.venue_id,
             pair=body.pair,
             side=body.side,  # type: ignore[arg-type]
+            order_type=body.order_type,  # type: ignore[arg-type]
             qty=body.qty,
             limit_price=body.limit_price,
+            stop_price=body.stop_price,
             slippage_bps=body.slippage_bps,
             leverage_bps=body.leverage_bps,
             rationale=body.rationale,
@@ -1540,6 +1554,135 @@ def desk_vault_route(ticket_id: str):
 def desk_reset():
     desk = reset_desk()
     return desk_snapshot(desk)
+
+
+# ── Broker adapter readiness (paper/sandbox only) ──────────────────
+
+
+@app.get("/brokers")
+def brokers_list():
+    return {"brokers": list_brokers(), "status": broker_status()}
+
+
+@app.get("/brokers/{broker_id}")
+def brokers_get(broker_id: str):
+    b = get_broker(broker_id)
+    if not b:
+        raise HTTPException(404, "broker not found")
+    return b
+
+
+@app.post("/brokers/execute")
+def brokers_execute_denied():
+    raise HTTPException(403, detail=denial("live_broker_execution_disabled"))
+
+
+# ── Live trading readiness gate (evidence packet, always operator-gated) ──
+
+
+@app.get("/live-gate")
+def live_gate_get():
+    return gate_status()
+
+
+class EvidenceIn(BaseModel):
+    key: str
+    satisfied: bool = True
+    note: str = ""
+
+
+@app.post("/live-gate/evidence")
+def live_gate_submit(body: EvidenceIn):
+    try:
+        return submit_evidence(body.key, body.satisfied, body.note)
+    except KeyError:
+        raise HTTPException(400, f"unknown evidence key: {body.key}") from None
+
+
+@app.post("/live-gate/approval-packet")
+def live_gate_packet():
+    return approval_packet()
+
+
+@app.post("/live-gate/execute")
+def live_gate_execute_denied():
+    raise HTTPException(403, detail=denial())
+
+
+# ── Agent Vaults — Monad-tailored governed financial envelopes ────
+
+
+class VaultIn(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    network: str = "monad-testnet"
+
+
+class ConnectorIn(BaseModel):
+    connector_id: str
+
+
+class VaultAgentIn(BaseModel):
+    agent_id: str
+    role: str = "trader"
+
+
+class LedgerTransferIn(BaseModel):
+    from_symbol: str
+    to_symbol: str
+    amount: float = Field(gt=0)
+    note: str = ""
+
+
+@app.get("/vaults")
+def vaults_list():
+    return {"vaults": list_vaults()}
+
+
+@app.post("/vaults")
+def vaults_create(body: VaultIn):
+    try:
+        return create_vault(body.name, body.network)
+    except Exception as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.get("/vaults/{vault_id}")
+def vaults_get(vault_id: str):
+    v = get_vault(vault_id)
+    if not v:
+        raise HTTPException(404, "vault not found")
+    return v
+
+
+@app.post("/vaults/{vault_id}/connectors")
+def vaults_add_connector(vault_id: str, body: ConnectorIn):
+    try:
+        return add_connector(vault_id, body.connector_id)
+    except KeyError:
+        raise HTTPException(404, "vault not found") from None
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@app.post("/vaults/{vault_id}/agents")
+def vaults_register_agent(vault_id: str, body: VaultAgentIn):
+    try:
+        return register_agent(vault_id, body.agent_id, body.role)
+    except KeyError:
+        raise HTTPException(404, "vault not found") from None
+
+
+@app.post("/vaults/{vault_id}/ledger/transfer")
+def vaults_ledger_transfer(vault_id: str, body: LedgerTransferIn):
+    try:
+        return ledger_transfer(vault_id, body.from_symbol, body.to_symbol, body.amount, body.note)
+    except KeyError:
+        raise HTTPException(404, "vault not found") from None
+
+
+@app.post("/vaults/{vault_id}/live-execute")
+def vaults_live_execute_denied(vault_id: str):
+    raise HTTPException(403, detail=denial("agent_vault_live_execution_disabled"))
 
 
 @app.get("/receipts/recent")

@@ -359,6 +359,151 @@ def test_company_os_commercial():
     assert hq["pitch"]["roommate"]
 
 
+def test_trading_desk_order_types_and_multi_asset():
+    from thesis_forge.trading import (
+        TradeTicket,
+        list_venues,
+        load_desk,
+        paper_fill,
+        propose_ticket,
+        reset_desk,
+    )
+
+    desk = reset_desk()
+
+    # market order fills against the live mark, not the submitted limit_price
+    market = propose_ticket(
+        desk,
+        TradeTicket(
+            agent="quant-bot",
+            venue_id="alpaca-equities",
+            pair="AAPL",
+            side="buy",
+            order_type="market",
+            qty=1,
+            limit_price=1.0,  # deliberately wrong — market orders ignore this
+            slippage_bps=10,
+            rationale="market order test",
+        ),
+    )
+    assert market.status == "risk_accepted"
+    filled = paper_fill(desk, market.ticket_id)
+    assert filled.status == "paper_filled"
+    assert filled.fill_price > 100  # AAPL mark, not the bogus $1 limit
+
+    # stop order must not fill until the mark crosses stop_price
+    desk = load_desk()
+    stop = propose_ticket(
+        desk,
+        TradeTicket(
+            agent="quant-bot",
+            venue_id="alpaca-equities",
+            pair="AAPL",
+            side="buy",
+            order_type="stop",
+            qty=1,
+            limit_price=desk.marks["AAPL"],
+            stop_price=desk.marks["AAPL"] * 10,  # far above mark — should not trigger
+            slippage_bps=10,
+            rationale="stop order test",
+        ),
+    )
+    assert stop.status == "risk_accepted"
+    try:
+        paper_fill(desk, stop.ticket_id)
+        assert False, "stop should not have triggered"
+    except ValueError as e:
+        assert "stop-not-triggered" in str(e)
+
+    # multi-asset venues are present alongside the Monad-native ones
+    venues = list_venues()
+    asset_classes = {v.get("asset_class") for v in venues}
+    assert "equities" in asset_classes
+    assert "forex" in asset_classes
+    assert "crypto_cex" in asset_classes
+    assert "crypto_dex" in asset_classes
+
+
+def test_broker_readiness_and_live_gate():
+    c = TestClient(app)
+
+    brokers = c.get("/brokers").json()
+    assert brokers["status"]["count"] >= 8
+    by_class = brokers["status"]["by_asset_class"]
+    assert "equities" in by_class and "forex" in by_class and "crypto_cex" in by_class
+    assert all(b.get("posture") for b in brokers["brokers"])
+
+    one = c.get("/brokers/alpaca_sandbox").json()
+    assert one["asset_class"] == "equities"
+    assert c.get("/brokers/does-not-exist").status_code == 404
+
+    # live routes are always denied — paper/sandbox posture only
+    denied = c.post("/brokers/execute")
+    assert denied.status_code == 403
+    assert denied.json()["detail"]["live_execution_enabled"] is False
+
+    gate = c.get("/live-gate").json()
+    assert gate["total"] >= 10
+    assert gate["ready_for_live"] is False
+
+    updated = c.post(
+        "/live-gate/evidence",
+        json={"key": "kill_switch_enabled", "satisfied": True, "note": "unit test"},
+    ).json()
+    assert updated["satisfied_count"] >= 1
+
+    packet = c.post("/live-gate/approval-packet").json()
+    assert packet["ready_for_live"] is False
+    assert "kill_switch_enabled" not in packet["missing_evidence"]
+    assert packet["live_execution_enabled"] is False
+
+    denied2 = c.post("/live-gate/execute")
+    assert denied2.status_code == 403
+
+
+def test_agent_vaults_monad_tailored():
+    c = TestClient(app)
+
+    created = c.post("/vaults", json={"name": "Alpha Desk Vault", "network": "monad-testnet"}).json()
+    assert created["chain_id"] == 10143
+    assert created["wallets"]["MON"] == 100.0
+    assert created["boundary"]["no_custody"] is True
+    assert created["boundary"]["live_execution"] is False
+    vault_id = created["vault_id"]
+
+    fetched = c.get(f"/vaults/{vault_id}").json()
+    assert fetched["vault_id"] == vault_id
+    assert c.get("/vaults/does-not-exist").status_code == 404
+
+    listed = c.get("/vaults").json()
+    assert any(v["vault_id"] == vault_id for v in listed["vaults"])
+
+    conn = c.post(f"/vaults/{vault_id}/connectors", json={"connector_id": "kuru"}).json()
+    assert any(x["id"] == "kuru" for x in conn["connectors"])
+    assert c.post(f"/vaults/{vault_id}/connectors", json={"connector_id": "not-a-real-venue"}).status_code == 400
+
+    agents = c.post(f"/vaults/{vault_id}/agents", json={"agent_id": "mm-bot", "role": "market-maker"}).json()
+    assert any(a["agent_id"] == "mm-bot" for a in agents["agents"])
+
+    ok_transfer = c.post(
+        f"/vaults/{vault_id}/ledger/transfer",
+        json={"from_symbol": "MON", "to_symbol": "USDC", "amount": 10, "note": "rebalance"},
+    ).json()
+    assert ok_transfer["ledger_recent"][0]["accepted"] is True
+    assert ok_transfer["wallets"]["MON"] == 90.0
+
+    over_transfer = c.post(
+        f"/vaults/{vault_id}/ledger/transfer",
+        json={"from_symbol": "MON", "to_symbol": "USDC", "amount": 999_999, "note": "too much"},
+    ).json()
+    assert over_transfer["ledger_recent"][0]["accepted"] is False
+    assert "insufficient-vault-balance" in over_transfer["ledger_recent"][0]["violations"]
+
+    denied = c.post(f"/vaults/{vault_id}/live-execute")
+    assert denied.status_code == 403
+    assert denied.json()["detail"]["live_execution_enabled"] is False
+
+
 def test_api_surface():
     c = TestClient(app)
     assert c.get("/health").json()["version"] == __version__

@@ -27,6 +27,7 @@ _ROOT = Path(__file__).resolve().parents[2]
 _BOOK_PATH = _ROOT / "receipts" / "trading_book.json"
 
 Side = Literal["buy", "sell"]
+OrderType = Literal["market", "limit", "stop", "stop_limit"]
 TicketStatus = Literal[
     "proposed",
     "risk_rejected",
@@ -45,6 +46,7 @@ VENUES: List[Dict[str, Any]] = [
         "name": "Kuru",
         "kind": "spot_orderbook",
         "category": "dex",
+        "asset_class": "crypto_dex",
         "atlas_id": "kuru",
         "pairs": ["MON/USDC", "WETH/USDC", "WBTC/USDC"],
         "adapter_status": "simulated",
@@ -55,6 +57,7 @@ VENUES: List[Dict[str, Any]] = [
         "name": "Uniswap-style AMM",
         "kind": "spot_amm",
         "category": "dex",
+        "asset_class": "crypto_dex",
         "atlas_id": "uniswap",
         "pairs": ["MON/USDC", "WETH/USDC"],
         "adapter_status": "simulated",
@@ -65,6 +68,7 @@ VENUES: List[Dict[str, Any]] = [
         "name": "Perpl",
         "kind": "perps",
         "category": "perps",
+        "asset_class": "crypto_perps",
         "atlas_id": "perpl",
         "pairs": ["MON-PERP", "ETH-PERP", "BTC-PERP"],
         "adapter_status": "planned",
@@ -75,6 +79,7 @@ VENUES: List[Dict[str, Any]] = [
         "name": "LeverUp",
         "kind": "perps",
         "category": "perps",
+        "asset_class": "crypto_perps",
         "atlas_id": "leverup",
         "pairs": ["MON-PERP", "ETH-PERP"],
         "adapter_status": "planned",
@@ -85,6 +90,7 @@ VENUES: List[Dict[str, Any]] = [
         "name": "Birdeye",
         "kind": "analytics",
         "category": "analytics",
+        "asset_class": "analytics",
         "atlas_id": "birdeye",
         "pairs": [],
         "adapter_status": "simulated",
@@ -95,10 +101,47 @@ VENUES: List[Dict[str, Any]] = [
         "name": "THESIS SovereignVault",
         "kind": "custody_gate",
         "category": "vault",
+        "asset_class": "vault",
         "atlas_id": "thesis-vault",
         "pairs": [],
         "adapter_status": "live",
         "use": "Onchain spend gate for any capital leaving the desk vault.",
+    },
+    {
+        "id": "alpaca-equities",
+        "name": "Alpaca Equities (paper)",
+        "kind": "equities_paper",
+        "category": "dex",
+        "asset_class": "equities",
+        "broker_id": "alpaca_sandbox",
+        "atlas_id": None,
+        "pairs": ["AAPL", "TSLA", "SPY", "NVDA", "QQQ"],
+        "adapter_status": "sandbox",
+        "use": "Paper US equities via the Alpaca sandbox adapter.",
+    },
+    {
+        "id": "oanda-forex",
+        "name": "OANDA Forex (practice)",
+        "kind": "forex_practice",
+        "category": "dex",
+        "asset_class": "forex",
+        "broker_id": "oanda_practice",
+        "atlas_id": None,
+        "pairs": ["EUR/USD", "GBP/USD", "USD/JPY"],
+        "adapter_status": "practice",
+        "use": "Practice forex via the OANDA practice adapter.",
+    },
+    {
+        "id": "coinbase-cex",
+        "name": "Coinbase (sandbox)",
+        "kind": "crypto_cex_sandbox",
+        "category": "dex",
+        "asset_class": "crypto_cex",
+        "broker_id": "coinbase_sandbox",
+        "atlas_id": None,
+        "pairs": ["BTC/USD", "ETH/USD"],
+        "adapter_status": "sandbox",
+        "use": "Sandbox centralized crypto exchange venue.",
     },
 ]
 
@@ -122,8 +165,10 @@ class TradeTicket(BaseModel):
     venue_id: str
     pair: str
     side: Side
+    order_type: OrderType = "limit"
     qty: float = Field(gt=0)
     limit_price: float = Field(gt=0)
+    stop_price: float = Field(default=0.0, ge=0)
     slippage_bps: int = Field(default=30, ge=0)
     leverage_bps: int = Field(default=10000, ge=10000)  # 10000 = 1x
     rationale: str = ""
@@ -172,6 +217,16 @@ _DEFAULT_MARKS = {
     "MON-PERP": 1.0,
     "ETH-PERP": 3200.0,
     "BTC-PERP": 64000.0,
+    "AAPL": 195.0,
+    "TSLA": 250.0,
+    "SPY": 560.0,
+    "NVDA": 130.0,
+    "QQQ": 480.0,
+    "EUR/USD": 1.08,
+    "GBP/USD": 1.27,
+    "USD/JPY": 155.0,
+    "BTC/USD": 64000.0,
+    "ETH/USD": 3200.0,
 }
 
 
@@ -395,6 +450,18 @@ def _desk_reason(code: str) -> str:
     }.get(code, code)
 
 
+def _stop_triggered(desk: DeskState, t: TradeTicket) -> bool:
+    """Stop / stop-limit orders only fill once the mark crosses stop_price."""
+    if t.order_type not in ("stop", "stop_limit"):
+        return True
+    if t.stop_price <= 0:
+        return False
+    mark = _mark_pair(desk, t.pair)
+    if t.side == "buy":
+        return mark >= t.stop_price
+    return mark <= t.stop_price
+
+
 def paper_fill(desk: DeskState, ticket_id: str) -> TradeTicket:
     ticket = next((t for t in desk.tickets if t.ticket_id == ticket_id), None)
     if not ticket:
@@ -403,10 +470,14 @@ def paper_fill(desk: DeskState, ticket_id: str) -> TradeTicket:
         raise ValueError(f"ticket status {ticket.status} cannot fill")
     if not desk.limits.paper_mode:
         raise ValueError("paper_mode disabled — live route not implemented in workstation")
+    if not _stop_triggered(desk, ticket):
+        raise ValueError("stop-not-triggered: mark has not crossed stop_price yet")
 
-    # fill at limit with small adverse slip half of slippage budget
+    # market orders reference the live mark; limit/stop orders reference the ticket price
+    ref_price = _mark_pair(desk, ticket.pair) if ticket.order_type == "market" else ticket.limit_price
+    # fill at reference price with small adverse slip half of slippage budget
     slip = ticket.slippage_bps / 10_000.0
-    px = ticket.limit_price * (1 + slip if ticket.side == "buy" else 1 - slip)
+    px = ref_price * (1 + slip if ticket.side == "buy" else 1 - slip)
     ticket.fill_price = px
     notional = ticket.qty * px
     key = _pos_key(ticket.venue_id, ticket.pair)
@@ -528,6 +599,18 @@ def agent_trade_ideas(desk: DeskState) -> List[TradeTicket]:
             leverage_bps=10000,
             rationale="Oversized ticket — should hit notional caps",
         ),
+        TradeTicket(
+            agent="quant-bot",
+            venue_id="alpaca-equities",
+            pair="AAPL",
+            side="buy",
+            order_type="market",
+            qty=10,
+            limit_price=_mark_pair(desk, "AAPL"),
+            slippage_bps=15,
+            leverage_bps=10000,
+            rationale="Diversify desk into paper equities via Alpaca sandbox",
+        ),
     ]
     return ideas
 
@@ -588,6 +671,23 @@ def desk_snapshot(desk: DeskState | None = None) -> Dict[str, Any]:
         strategies = list_strategies()
     except Exception:
         strategies = []
+    try:
+        from .broker_readiness import broker_status
+
+        markets = broker_status()
+    except Exception:
+        markets = None
+    try:
+        from .live_gate import gate_status
+
+        gate = gate_status()
+        live_gate_summary = {
+            "satisfied_count": gate["satisfied_count"],
+            "total": gate["total"],
+            "ready_for_live": gate["ready_for_live"],
+        }
+    except Exception:
+        live_gate_summary = None
     return {
         "schema": "thesis.trading.snapshot.v1",
         "cash_usdc": d.cash_usdc,
@@ -603,6 +703,8 @@ def desk_snapshot(desk: DeskState | None = None) -> Dict[str, Any]:
         "venues": list_venues(),
         "marks": d.marks,
         "strategies": strategies,
+        "markets": markets,
+        "live_gate": live_gate_summary,
         "paper_mode": d.limits.paper_mode,
         "updated_at": d.updated_at,
         "business": {

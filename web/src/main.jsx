@@ -88,12 +88,29 @@ function App() {
   const [markFeed, setMarkFeed] = useState(null);
   const [strategyRun, setStrategyRun] = useState(null);
   const [vaultRoute, setVaultRoute] = useState(null);
+  const [brokers, setBrokers] = useState(null);
+  const [liveGate, setLiveGate] = useState(null);
+  const [approvalPacket, setApprovalPacket] = useState(null);
+  const [vaults, setVaults] = useState([]);
+  const [activeVault, setActiveVault] = useState(null);
+  const [vaultName, setVaultName] = useState("Alpha Desk Vault");
+  const [vaultConnectorId, setVaultConnectorId] = useState("kuru");
+  const [vaultAgentId, setVaultAgentId] = useState("mm-bot");
+  const [vaultAgentRole, setVaultAgentRole] = useState("market-maker");
+  const [ledgerForm, setLedgerForm] = useState({
+    from_symbol: "MON",
+    to_symbol: "USDC",
+    amount: 10,
+    note: "rebalance",
+  });
   const [ticketForm, setTicketForm] = useState({
     venue_id: "kuru",
     pair: "MON/USDC",
     side: "buy",
+    order_type: "limit",
     qty: 25,
     limit_price: 1,
+    stop_price: 0,
     slippage_bps: 20,
     leverage_bps: 10000,
     agent: "desk-trader",
@@ -126,7 +143,7 @@ function App() {
 
   const refresh = useCallback(async () => {
     try {
-      const [h, j, p, d, q, wp, rc, dk, hm, co, eco, ai, wl, sb, company] = await Promise.all([
+      const [h, j, p, d, q, wp, rc, dk, hm, co, eco, ai, wl, sb, company, brk, gate, vlts] = await Promise.all([
         api("/health"),
         api("/judge"),
         api("/protocols"),
@@ -142,6 +159,9 @@ function App() {
         api("/wallets"),
         api("/sandbox"),
         api("/company"),
+        api("/brokers"),
+        api("/live-gate"),
+        api("/vaults"),
       ]);
       setHealth(h);
       setJudge(j);
@@ -159,6 +179,9 @@ function App() {
       setWallets(wl);
       setSandbox(sb);
       setHq(company);
+      setBrokers(brk);
+      setLiveGate(gate);
+      setVaults(vlts.vaults || []);
       if (dk?.marks?.["MON/USDC"]) {
         setTicketForm((f) => ({ ...f, limit_price: dk.marks["MON/USDC"] }));
       }
@@ -172,6 +195,15 @@ function App() {
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    if (!activeVault && vaults.length) setActiveVault(vaults[0].vault_id);
+  }, [vaults, activeVault]);
+
+  const selectedVault = useMemo(
+    () => vaults.find((v) => v.vault_id === activeVault) || null,
+    [vaults, activeVault]
+  );
 
   function flash(msg) {
     setToast(msg);
@@ -417,6 +449,104 @@ function App() {
       });
       setVaultRoute(data);
       if (data.desk) setDesk(data.desk);
+    } catch (e) {
+      setErr(String(e.message || e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleEvidence(key, satisfied) {
+    setBusy(true);
+    setErr("");
+    try {
+      const data = await api("/live-gate/evidence", {
+        method: "POST",
+        body: JSON.stringify({ key, satisfied, note: "" }),
+      });
+      setLiveGate(data);
+    } catch (e) {
+      setErr(String(e.message || e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function generateApprovalPacket() {
+    setBusy(true);
+    setErr("");
+    try {
+      const data = await api("/live-gate/approval-packet", { method: "POST", body: "{}" });
+      setApprovalPacket(data);
+    } catch (e) {
+      setErr(String(e.message || e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function createVault() {
+    setBusy(true);
+    setErr("");
+    try {
+      const v = await api("/vaults", {
+        method: "POST",
+        body: JSON.stringify({ name: vaultName, network }),
+      });
+      setVaults((await api("/vaults")).vaults || []);
+      setActiveVault(v.vault_id);
+      flash(`Vault created · ${v.name}`);
+    } catch (e) {
+      setErr(String(e.message || e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function addVaultConnector() {
+    if (!activeVault) return;
+    setBusy(true);
+    setErr("");
+    try {
+      await api(`/vaults/${activeVault}/connectors`, {
+        method: "POST",
+        body: JSON.stringify({ connector_id: vaultConnectorId }),
+      });
+      setVaults((await api("/vaults")).vaults || []);
+    } catch (e) {
+      setErr(String(e.message || e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function registerVaultAgent() {
+    if (!activeVault) return;
+    setBusy(true);
+    setErr("");
+    try {
+      await api(`/vaults/${activeVault}/agents`, {
+        method: "POST",
+        body: JSON.stringify({ agent_id: vaultAgentId, role: vaultAgentRole }),
+      });
+      setVaults((await api("/vaults")).vaults || []);
+    } catch (e) {
+      setErr(String(e.message || e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitLedgerTransfer() {
+    if (!activeVault) return;
+    setBusy(true);
+    setErr("");
+    try {
+      await api(`/vaults/${activeVault}/ledger/transfer`, {
+        method: "POST",
+        body: JSON.stringify(ledgerForm),
+      });
+      setVaults((await api("/vaults")).vaults || []);
     } catch (e) {
       setErr(String(e.message || e));
     } finally {
@@ -902,6 +1032,7 @@ function App() {
           ["home", "DAILY"],
           ["ai", "AI"],
           ["desk", "DESK"],
+          ["vaults", "VAULTS"],
           ["academy", "ACADEMY"],
           ["studio", "STUDIO"],
           ["ide", "IDE"],
@@ -1879,7 +2010,7 @@ function App() {
 
       {tab === "desk" && (
         <section className="panel">
-          <div className="grid3">
+          <div className="grid3 desk-grid">
             <article>
               <label>TRADING BUSINESS DESK</label>
               <p className="muted sm">
@@ -2005,6 +2136,18 @@ function App() {
                   <option value="sell">sell</option>
                 </select>
               </div>
+              <div className="field">
+                <span>Order type</span>
+                <select
+                  value={ticketForm.order_type}
+                  onChange={(e) => setTicketForm((f) => ({ ...f, order_type: e.target.value }))}
+                >
+                  <option value="market">market</option>
+                  <option value="limit">limit</option>
+                  <option value="stop">stop</option>
+                  <option value="stop_limit">stop_limit</option>
+                </select>
+              </div>
               {[
                 ["qty", "Qty"],
                 ["limit_price", "Limit"],
@@ -2019,6 +2162,16 @@ function App() {
                   />
                 </div>
               ))}
+              {(ticketForm.order_type === "stop" || ticketForm.order_type === "stop_limit") && (
+                <div className="field">
+                  <span>Stop price</span>
+                  <input
+                    type="number"
+                    value={ticketForm.stop_price}
+                    onChange={(e) => setTicketForm((f) => ({ ...f, stop_price: Number(e.target.value) }))}
+                  />
+                </div>
+              )}
               <input
                 value={ticketForm.rationale}
                 onChange={(e) => setTicketForm((f) => ({ ...f, rationale: e.target.value }))}
@@ -2155,12 +2308,293 @@ function App() {
                     <b>{v.name}</b>
                     <span className="muted">
                       {" "}
-                      · {v.kind} · {v.adapter_status || v.atlas_status}
+                      · {v.asset_class || v.kind} · {v.adapter_status || v.atlas_status}
                     </span>
                     <p className="muted sm">{v.use}</p>
                   </div>
                 ))}
               </div>
+            </article>
+
+            <article className="result">
+              <label>MARKETS · BROKER READINESS</label>
+              <p className="muted sm">
+                Real-world asset classes modeled as paper/sandbox adapter readiness — equities, forex, and
+                centralized crypto exchanges alongside Monad-native DEX/perps venues. No live brokerage keys ever
+                enter this platform.
+              </p>
+              {brokers?.status && (
+                <div className="kv">
+                  <span>Broker adapters</span>
+                  <b>{brokers.status.count}</b>
+                </div>
+              )}
+              {brokers?.status?.by_asset_class && (
+                <div className="chips col">
+                  {Object.entries(brokers.status.by_asset_class).map(([cls, n]) => (
+                    <span key={cls} className="pill ok">
+                      {cls} · {n}
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div className="proto-list" style={{ maxHeight: 160 }}>
+                {(brokers?.brokers || []).map((b) => (
+                  <div key={b.id} className="proto">
+                    <b>{b.name}</b>
+                    <span className="muted">
+                      {" "}
+                      · {b.asset_class} · {b.posture}
+                    </span>
+                    <p className="muted sm">{b.notes}</p>
+                  </div>
+                ))}
+              </div>
+
+              <label>LIVE TRADING READINESS GATE</label>
+              <p className="muted sm">
+                Evidence-based approval packet. Completeness is informational only — live execution stays disabled
+                until a manual operator cutover outside this platform.
+              </p>
+              {liveGate && (
+                <div className="kv">
+                  <span>Evidence complete</span>
+                  <b>
+                    {liveGate.satisfied_count} / {liveGate.total}
+                  </b>
+                </div>
+              )}
+              {liveGate && (
+                <div className="chips col" style={{ maxHeight: 220, overflowY: "auto" }}>
+                  {liveGate.evidence.map((e) => (
+                    <button
+                      key={e.key}
+                      type="button"
+                      className={e.satisfied ? "on" : ""}
+                      disabled={busy}
+                      onClick={() => toggleEvidence(e.key, !e.satisfied)}
+                      title={e.label}
+                    >
+                      {e.satisfied ? "✓" : "○"} {e.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <button type="button" className="forge" disabled={busy} onClick={generateApprovalPacket}>
+                GENERATE APPROVAL PACKET →
+              </button>
+              {approvalPacket && (
+                <>
+                  <Pill ok={approvalPacket.ready_for_live}>
+                    {approvalPacket.ready_for_live ? "EVIDENCE COMPLETE" : "LIVE EXECUTION DISABLED"}
+                  </Pill>
+                  <p className="muted sm">{approvalPacket.posture}</p>
+                  {approvalPacket.missing_evidence?.length > 0 && (
+                    <ul>
+                      {approvalPacket.missing_evidence.slice(0, 5).map((m) => (
+                        <li key={m}>{m}</li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              )}
+            </article>
+          </div>
+        </section>
+      )}
+
+      {tab === "vaults" && (
+        <section className="panel">
+          <div className="grid3 vault-grid">
+            <article>
+              <label>AGENT VAULTS · MONAD</label>
+              <p className="muted sm">
+                Vault boundary → wallet → policy gate → connector → receipt evidence. Every vault is a governed
+                paper envelope for an agent swarm — no custody, no live keys, no live money movement.
+              </p>
+              <input value={vaultName} onChange={(e) => setVaultName(e.target.value)} placeholder="Vault name" />
+              <button type="button" className="forge" disabled={busy || !vaultName} onClick={createVault}>
+                CREATE VAULT →
+              </button>
+
+              <label>VAULTS</label>
+              <div className="chips col">
+                {vaults.length === 0 && <p className="muted sm">No vaults yet — create one above.</p>}
+                {vaults.map((v) => (
+                  <button
+                    key={v.vault_id}
+                    type="button"
+                    className={activeVault === v.vault_id ? "on" : ""}
+                    onClick={() => setActiveVault(v.vault_id)}
+                  >
+                    {v.name} · {Number(v.wallets?.MON || 0).toFixed(1)} MON
+                  </button>
+                ))}
+              </div>
+
+              {selectedVault && (
+                <>
+                  <label>ADD CONNECTOR</label>
+                  <div className="field">
+                    <span>Venue / broker id</span>
+                    <input
+                      value={vaultConnectorId}
+                      onChange={(e) => setVaultConnectorId(e.target.value)}
+                      placeholder="kuru, alpaca_sandbox, oanda_practice…"
+                    />
+                  </div>
+                  <button type="button" className="ghost block" disabled={busy} onClick={addVaultConnector}>
+                    Attach connector
+                  </button>
+
+                  <label>REGISTER AGENT</label>
+                  <div className="field">
+                    <span>Agent id</span>
+                    <input value={vaultAgentId} onChange={(e) => setVaultAgentId(e.target.value)} />
+                  </div>
+                  <div className="field">
+                    <span>Role</span>
+                    <input value={vaultAgentRole} onChange={(e) => setVaultAgentRole(e.target.value)} />
+                  </div>
+                  <button type="button" className="ghost block" disabled={busy} onClick={registerVaultAgent}>
+                    Register agent
+                  </button>
+                </>
+              )}
+            </article>
+
+            <article className="result">
+              <label>{selectedVault ? `${selectedVault.name.toUpperCase()} · WALLETS` : "SELECT A VAULT"}</label>
+              {selectedVault && (
+                <>
+                  <div className="kv">
+                    <span>Network</span>
+                    <b>
+                      {selectedVault.network} · chain {selectedVault.chain_id}
+                    </b>
+                  </div>
+                  {Object.entries(selectedVault.wallets || {}).map(([sym, bal]) => (
+                    <div className="kv" key={sym}>
+                      <span>{sym}</span>
+                      <b>{Number(bal).toFixed(4)}</b>
+                    </div>
+                  ))}
+                  <div className="kv">
+                    <span>No custody</span>
+                    <Pill ok={selectedVault.boundary?.no_custody}>
+                      {selectedVault.boundary?.no_custody ? "ENFORCED" : "—"}
+                    </Pill>
+                  </div>
+                  <div className="kv">
+                    <span>Live execution</span>
+                    <Pill ok={false}>{selectedVault.boundary?.live_execution ? "ENABLED" : "DISABLED"}</Pill>
+                  </div>
+
+                  <label>CONNECTORS</label>
+                  {(selectedVault.connectors || []).length === 0 ? (
+                    <p className="muted sm">No connectors attached.</p>
+                  ) : (
+                    <div className="chips col">
+                      {selectedVault.connectors.map((c) => (
+                        <span key={c.id} className="pill ok">
+                          {c.name} · {c.asset_class || c.kind}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  <label>AGENTS</label>
+                  {(selectedVault.agents || []).length === 0 ? (
+                    <p className="muted sm">No agents registered.</p>
+                  ) : (
+                    <div className="chips col">
+                      {selectedVault.agents.map((a) => (
+                        <span key={a.agent_id} className="pill ok">
+                          {a.agent_id} · {a.role}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </article>
+
+            <article className="result">
+              <label>LEDGER TRANSFER</label>
+              <p className="muted sm">
+                Internal paper accounting move within the vault, gated by the same NOMOS policy kernel as desk
+                tickets. Never touches real funds.
+              </p>
+              {selectedVault && (
+                <>
+                  <div className="field">
+                    <span>From</span>
+                    <select
+                      value={ledgerForm.from_symbol}
+                      onChange={(e) => setLedgerForm((f) => ({ ...f, from_symbol: e.target.value }))}
+                    >
+                      {Object.keys(selectedVault.wallets || { MON: 0, USDC: 0 }).map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="field">
+                    <span>To</span>
+                    <select
+                      value={ledgerForm.to_symbol}
+                      onChange={(e) => setLedgerForm((f) => ({ ...f, to_symbol: e.target.value }))}
+                    >
+                      {Object.keys(selectedVault.wallets || { MON: 0, USDC: 0 }).map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="field">
+                    <span>Amount</span>
+                    <input
+                      type="number"
+                      value={ledgerForm.amount}
+                      onChange={(e) => setLedgerForm((f) => ({ ...f, amount: Number(e.target.value) }))}
+                    />
+                  </div>
+                  <input
+                    value={ledgerForm.note}
+                    onChange={(e) => setLedgerForm((f) => ({ ...f, note: e.target.value }))}
+                    placeholder="Note"
+                  />
+                  <button type="button" className="forge" disabled={busy} onClick={submitLedgerTransfer}>
+                    SUBMIT TRANSFER → NOMOS GATE
+                  </button>
+
+                  <label>RECENT LEDGER ENTRIES</label>
+                  <div className="plans">
+                    {(selectedVault.ledger_recent || []).slice(0, 10).map((e) => (
+                      <div key={e.entry_id} className={`plan ${e.accepted ? "yes" : "no"}`}>
+                        <header>
+                          <b>
+                            {e.from_symbol} → {e.to_symbol}
+                          </b>
+                          <Pill ok={e.accepted}>{e.accepted ? "ACCEPT" : "REJECT"}</Pill>
+                        </header>
+                        <p>
+                          {Number(e.amount).toFixed(4)} · {e.note}
+                        </p>
+                        {!e.accepted && (
+                          <ul>
+                            {(e.reasons?.length ? e.reasons : e.violations || []).slice(0, 3).map((r) => (
+                              <li key={r}>{r}</li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
             </article>
           </div>
         </section>
