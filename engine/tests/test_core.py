@@ -574,6 +574,37 @@ def test_security_intelligence_and_approvals():
     ).status_code == 404
 
 
+def test_portfolio_risk_reporting():
+    from thesis_forge.trading import reset_desk
+
+    reset_desk()
+    c = TestClient(app)
+
+    base = c.get("/portfolio").json()
+    assert base["schema"] == "thesis.portfolio.v1"
+    assert base["vaults"]["count"] >= 0
+    assert base["total_portfolio_notional"] >= 0
+
+    v1 = c.post("/vaults", json={"name": "Whale Vault", "network": "monad-testnet"}).json()
+    v2 = c.post("/vaults", json={"name": "Small Vault", "network": "monad-testnet"}).json()
+
+    # both vaults seed with identical starting balances -> ~50/50 concentration
+    snap = c.get("/portfolio?concentration_limit_pct=1").json()
+    row_ids = {r["vault_id"] for r in snap["vaults"]["rows"]}
+    assert v1["vault_id"] in row_ids and v2["vault_id"] in row_ids
+    total_pct = sum(r["pct_of_vault_total"] for r in snap["vaults"]["rows"])
+    assert abs(total_pct - 100.0) < 0.5
+    # with a 1% limit, ~50% concentration on either vault trips the check
+    assert len(snap["vaults"]["concentration_violations"]) >= 1
+
+    lenient = c.get("/portfolio?concentration_limit_pct=99").json()
+    assert lenient["vaults"]["concentration_limit_pct"] == 99.0
+    assert len(lenient["vaults"]["concentration_violations"]) == 0
+
+    assert "pending_approval_notional" in base["risk_overhang"]
+    assert base["doctrine"]
+
+
 def test_api_surface():
     c = TestClient(app)
     assert c.get("/health").json()["version"] == __version__

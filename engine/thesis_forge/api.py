@@ -62,6 +62,7 @@ from .agent_vault import (
     list_vaults,
     register_agent,
 )
+from .portfolio import portfolio_snapshot
 from .security_intelligence import (
     capability_matrix as security_capability_matrix,
     decide_approval,
@@ -1771,6 +1772,11 @@ def security_approval_decide(approval_id: str, body: ApprovalDecisionIn):
         raise HTTPException(404, "approval not found") from None
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
+
+
+@app.get("/portfolio")
+def portfolio_get(concentration_limit_pct: float = Query(40.0, gt=0, le=100)):
+    return portfolio_snapshot(concentration_limit_pct)
 
 
 @app.get("/receipts/recent")

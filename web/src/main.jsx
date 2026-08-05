@@ -108,6 +108,8 @@ function App() {
   const [secCapabilities, setSecCapabilities] = useState([]);
   const [approvals, setApprovals] = useState([]);
   const [approverId, setApproverId] = useState("alice");
+  const [portfolio, setPortfolio] = useState(null);
+  const [concentrationLimit, setConcentrationLimit] = useState(40);
   const [ticketForm, setTicketForm] = useState({
     venue_id: "kuru",
     pair: "MON/USDC",
@@ -148,31 +150,33 @@ function App() {
 
   const refresh = useCallback(async () => {
     try {
-      const [h, j, p, d, q, wp, rc, dk, hm, co, eco, ai, wl, sb, company, brk, gate, vlts, careers, useCases, caps, appr] =
-        await Promise.all([
-          api("/health"),
-          api("/judge"),
-          api("/protocols"),
-          api("/deployment"),
-          api("/academy/quests"),
-          api("/workspace/projects"),
-          api("/receipts/recent?n=12"),
-          api("/desk"),
-          api(`/home?network=${network}`),
-          api(`/intelligence/coach?network=${network}`),
-          api(`/ecosystem?network=${network === "monad-mainnet" ? "monad-mainnet" : "monad-testnet"}`),
-          api("/ai"),
-          api("/wallets"),
-          api("/sandbox"),
-          api("/company"),
-          api("/brokers"),
-          api("/live-gate"),
-          api("/vaults"),
-          api("/security/careers"),
-          api("/security/use-cases"),
-          api("/security/capabilities"),
-          api("/security/approvals"),
-        ]);
+      const [
+        h, j, p, d, q, wp, rc, dk, hm, co, eco, ai, wl, sb, company, brk, gate, vlts, careers, useCases, caps, appr, port,
+      ] = await Promise.all([
+        api("/health"),
+        api("/judge"),
+        api("/protocols"),
+        api("/deployment"),
+        api("/academy/quests"),
+        api("/workspace/projects"),
+        api("/receipts/recent?n=12"),
+        api("/desk"),
+        api(`/home?network=${network}`),
+        api(`/intelligence/coach?network=${network}`),
+        api(`/ecosystem?network=${network === "monad-mainnet" ? "monad-mainnet" : "monad-testnet"}`),
+        api("/ai"),
+        api("/wallets"),
+        api("/sandbox"),
+        api("/company"),
+        api("/brokers"),
+        api("/live-gate"),
+        api("/vaults"),
+        api("/security/careers"),
+        api("/security/use-cases"),
+        api("/security/capabilities"),
+        api("/security/approvals"),
+        api("/portfolio"),
+      ]);
       setHealth(h);
       setJudge(j);
       setProtocols(p);
@@ -196,6 +200,7 @@ function App() {
       setSecUseCases(useCases.use_cases || []);
       setSecCapabilities(caps.capabilities || []);
       setApprovals(appr.approvals || []);
+      setPortfolio(port);
       if (dk?.marks?.["MON/USDC"]) {
         setTicketForm((f) => ({ ...f, limit_price: dk.marks["MON/USDC"] }));
       }
@@ -579,6 +584,19 @@ function App() {
         body: JSON.stringify({ role, approver_id: approverId || "operator", approved }),
       });
       setApprovals((await api("/security/approvals")).approvals || []);
+    } catch (e) {
+      setErr(String(e.message || e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function refreshPortfolio() {
+    setBusy(true);
+    setErr("");
+    try {
+      const data = await api(`/portfolio?concentration_limit_pct=${concentrationLimit}`);
+      setPortfolio(data);
     } catch (e) {
       setErr(String(e.message || e));
     } finally {
@@ -1066,6 +1084,7 @@ function App() {
           ["desk", "DESK"],
           ["vaults", "VAULTS"],
           ["security", "SECURITY"],
+          ["portfolio", "PORTFOLIO"],
           ["academy", "ACADEMY"],
           ["studio", "STUDIO"],
           ["ide", "IDE"],
@@ -2726,6 +2745,110 @@ function App() {
                   </div>
                 ))}
               </div>
+            </article>
+          </div>
+        </section>
+      )}
+
+      {tab === "portfolio" && (
+        <section className="panel">
+          <div className="grid3 vault-grid">
+            <article>
+              <label>PORTFOLIO · DESK</label>
+              <p className="muted sm">
+                Consolidated risk view across the trading desk and every Agent Vault. Reporting only — concentration
+                limits and approval overhang are surfaced for an operator to act on, never enforced automatically.
+              </p>
+              {portfolio && (
+                <>
+                  <div className="kv">
+                    <span>Desk equity</span>
+                    <b>{Number(portfolio.desk.equity).toFixed(2)}</b>
+                  </div>
+                  <div className="kv">
+                    <span>Desk open notional</span>
+                    <b>{Number(portfolio.desk.open_notional).toFixed(2)}</b>
+                  </div>
+                  <div className="kv">
+                    <span>Day PnL</span>
+                    <b className={portfolio.desk.day_pnl >= 0 ? "up" : "down"}>
+                      {Number(portfolio.desk.day_pnl).toFixed(2)}
+                    </b>
+                  </div>
+                  <div className="kv">
+                    <span>Vaults total (USD)</span>
+                    <b>{Number(portfolio.vaults.total_usd_value).toFixed(2)}</b>
+                  </div>
+                  <div className="kv">
+                    <span>Total portfolio notional</span>
+                    <b>{Number(portfolio.total_portfolio_notional).toFixed(2)}</b>
+                  </div>
+                  <div className="kv">
+                    <span>Pending approval overhang</span>
+                    <b>
+                      {portfolio.risk_overhang.pending_approval_count} ·{" "}
+                      {Number(portfolio.risk_overhang.pending_approval_notional).toFixed(2)}
+                    </b>
+                  </div>
+                </>
+              )}
+              <label>CONCENTRATION LIMIT</label>
+              <div className="field">
+                <span>Limit %</span>
+                <input
+                  type="number"
+                  value={concentrationLimit}
+                  onChange={(e) => setConcentrationLimit(Number(e.target.value))}
+                />
+              </div>
+              <button type="button" className="forge" disabled={busy} onClick={refreshPortfolio}>
+                RECOMPUTE PORTFOLIO →
+              </button>
+            </article>
+
+            <article className="result">
+              <label>VAULT CONCENTRATION</label>
+              {portfolio?.vaults?.rows?.length === 0 && <p className="muted sm">No vaults yet.</p>}
+              <div className="plans">
+                {(portfolio?.vaults?.rows || []).map((r) => {
+                  const over = r.pct_of_vault_total > (portfolio?.vaults?.concentration_limit_pct ?? 100);
+                  return (
+                    <div key={r.vault_id} className={`plan ${over ? "no" : "yes"}`}>
+                      <header>
+                        <b>{r.name}</b>
+                        <Pill ok={!over} warn={over}>
+                          {r.pct_of_vault_total.toFixed(1)}%
+                        </Pill>
+                      </header>
+                      <p>
+                        {Number(r.usd_value).toFixed(2)} USD · {r.connectors} connectors · {r.agents} agents
+                      </p>
+                      <div className="progress">
+                        <div className="bar" style={{ width: `${Math.min(100, r.pct_of_vault_total)}%` }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </article>
+
+            <article className="result">
+              <label>CONCENTRATION VIOLATIONS</label>
+              <p className="muted sm">
+                Vaults exceeding the {portfolio?.vaults?.concentration_limit_pct ?? "—"}% concentration limit.
+              </p>
+              {(portfolio?.vaults?.concentration_violations || []).length === 0 ? (
+                <p className="muted sm">No violations at the current limit.</p>
+              ) : (
+                <div className="chips col">
+                  {portfolio.vaults.concentration_violations.map((v) => (
+                    <span key={v.vault_id} className="pill bad">
+                      {v.name} · {v.pct_of_vault_total.toFixed(1)}%
+                    </span>
+                  ))}
+                </div>
+              )}
+              {portfolio?.doctrine && <p className="muted sm">{portfolio.doctrine}</p>}
             </article>
           </div>
         </section>
