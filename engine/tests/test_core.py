@@ -504,6 +504,76 @@ def test_agent_vaults_monad_tailored():
     assert denied.json()["detail"]["live_execution_enabled"] is False
 
 
+def test_security_intelligence_and_approvals():
+    c = TestClient(app)
+
+    careers = c.get("/security/careers").json()["careers"]
+    assert any(x["id"] == "risk-officer" for x in careers)
+    assert any(x["id"] == "compliance-officer" for x in careers)
+
+    one = c.get("/security/careers/risk-officer").json()
+    assert "ticket" in one["approval_scope"]
+    assert c.get("/security/careers/does-not-exist").status_code == 404
+
+    found = c.get("/security/careers/search?q=vault").json()["careers"]
+    assert any(x["id"] == "vault-operator" for x in found)
+
+    use_cases = c.get("/security/use-cases").json()["use_cases"]
+    assert any(u["id"] == "trade-ticket-approval" for u in use_cases)
+
+    caps = c.get("/security/capabilities").json()["capabilities"]
+    assert any(cap["domain"] == "Trading Risk & Governance" for cap in caps)
+
+    briefing = c.get("/security/briefing?topic=trading-desk").json()
+    assert briefing["doctrine"]
+
+    # a large ticket over the approval threshold auto-creates a pending approval
+    from thesis_forge.trading import reset_desk
+
+    reset_desk()
+    big = c.post(
+        "/desk/ticket",
+        json={
+            "agent": "quant-bot",
+            "venue_id": "kuru",
+            "pair": "MON/USDC",
+            "side": "buy",
+            "qty": 400,
+            "limit_price": 1.0,  # notional 400 >= 300 approval threshold, within desk's 500 per-ticket cap
+            "slippage_bps": 15,
+            "leverage_bps": 10000,
+            "rationale": "large ticket needing approval",
+        },
+    ).json()
+    assert big["ticket"]["status"] == "risk_accepted"
+
+    pending = c.get("/security/approvals?status=pending").json()["approvals"]
+    match = next((a for a in pending if a["ref_id"] == big["ticket"]["ticket_id"]), None)
+    assert match is not None
+    assert match["roles_required"] == ["risk-officer"]
+
+    fetched = c.get(f"/security/approvals/{match['approval_id']}").json()
+    assert fetched["status"] == "pending"
+
+    # wrong role is rejected
+    bad_role = c.post(
+        f"/security/approvals/{match['approval_id']}/decide",
+        json={"role": "compliance-officer", "approver_id": "carol", "approved": True},
+    )
+    assert bad_role.status_code == 400
+
+    decided = c.post(
+        f"/security/approvals/{match['approval_id']}/decide",
+        json={"role": "risk-officer", "approver_id": "alice", "approved": True, "comment": "looks fine"},
+    ).json()
+    assert decided["status"] == "approved"
+
+    assert c.post(
+        f"/security/approvals/does-not-exist/decide",
+        json={"role": "risk-officer", "approver_id": "alice"},
+    ).status_code == 404
+
+
 def test_api_surface():
     c = TestClient(app)
     assert c.get("/health").json()["version"] == __version__

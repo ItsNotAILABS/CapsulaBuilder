@@ -62,6 +62,20 @@ from .agent_vault import (
     list_vaults,
     register_agent,
 )
+from .security_intelligence import (
+    capability_matrix as security_capability_matrix,
+    decide_approval,
+    get_approval,
+    get_career,
+    get_use_case,
+    list_approvals,
+    list_careers,
+    list_use_cases,
+    search_capabilities,
+    search_careers,
+    search_use_cases,
+    security_briefing,
+)
 from .ai_node import ai_chat, ensure_ai_node, node_status, promote_request
 from .sandbox import (
     create_sandbox,
@@ -1683,6 +1697,80 @@ def vaults_ledger_transfer(vault_id: str, body: LedgerTransferIn):
 @app.post("/vaults/{vault_id}/live-execute")
 def vaults_live_execute_denied(vault_id: str):
     raise HTTPException(403, detail=denial("agent_vault_live_execution_disabled"))
+
+
+# ── Security & governance intelligence — careers, use cases, approvals ──
+
+
+@app.get("/security/careers")
+def security_careers(team: str | None = None, stage: str | None = None):
+    return {"careers": list_careers(team, stage)}
+
+
+@app.get("/security/careers/search")
+def security_careers_search(q: str = ""):
+    return {"careers": search_careers(q)}
+
+
+@app.get("/security/careers/{career_id}")
+def security_career_get(career_id: str):
+    c = get_career(career_id)
+    if not c:
+        raise HTTPException(404, "career not found")
+    return c
+
+
+@app.get("/security/use-cases")
+def security_use_cases(buyer: str | None = None):
+    return {"use_cases": list_use_cases(buyer)}
+
+
+@app.get("/security/use-cases/{use_case_id}")
+def security_use_case_get(use_case_id: str):
+    u = get_use_case(use_case_id)
+    if not u:
+        raise HTTPException(404, "use case not found")
+    return u
+
+
+@app.get("/security/capabilities")
+def security_capabilities(q: str = ""):
+    return {"capabilities": search_capabilities(q) if q else security_capability_matrix()}
+
+
+@app.get("/security/briefing")
+def security_briefing_get(topic: str = "trading-desk"):
+    return security_briefing(topic)
+
+
+@app.get("/security/approvals")
+def security_approvals_list(status: str | None = None):
+    return {"approvals": list_approvals(status)}
+
+
+@app.get("/security/approvals/{approval_id}")
+def security_approval_get(approval_id: str):
+    a = get_approval(approval_id)
+    if not a:
+        raise HTTPException(404, "approval not found")
+    return a
+
+
+class ApprovalDecisionIn(BaseModel):
+    role: str
+    approver_id: str
+    approved: bool = True
+    comment: str = ""
+
+
+@app.post("/security/approvals/{approval_id}/decide")
+def security_approval_decide(approval_id: str, body: ApprovalDecisionIn):
+    try:
+        return decide_approval(approval_id, body.role, body.approver_id, body.approved, body.comment)
+    except KeyError:
+        raise HTTPException(404, "approval not found") from None
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
 @app.get("/receipts/recent")

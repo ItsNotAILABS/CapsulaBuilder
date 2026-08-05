@@ -139,6 +139,18 @@ def add_connector(vault_id: str, connector_id: str) -> Dict[str, Any]:
         vault.updated_at = time.time()
         _save_all(vaults)
         seal("agent_vault.connector", {"vault_id": vault_id, "connector_id": connector_id})
+        try:
+            from .security_intelligence import create_approval
+
+            create_approval(
+                "connector",
+                connector_id,
+                notional=0.0,
+                requester=f"vault:{vault_id}",
+                context={"vault_id": vault_id, "connector_id": connector_id},
+            )
+        except Exception:
+            pass
     return vault_snapshot(vault)
 
 
@@ -219,6 +231,21 @@ def ledger_transfer(vault_id: str, from_symbol: str, to_symbol: str, amount: flo
         },
     )
     entry.receipt_hash = rc["receipt_hash"]
+
+    if entry.accepted:
+        try:
+            from .security_intelligence import approval_required, create_approval
+
+            if approval_required("ledger_transfer", amount):
+                create_approval(
+                    "ledger_transfer",
+                    entry.entry_id,
+                    notional=amount,
+                    requester=f"vault:{vault_id}",
+                    context={"vault_id": vault_id, "from": from_symbol, "to": to_symbol},
+                )
+        except Exception:
+            pass
 
     vault.ledger.insert(0, entry)
     vault.ledger = vault.ledger[:200]

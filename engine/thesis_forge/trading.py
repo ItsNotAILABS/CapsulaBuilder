@@ -428,6 +428,22 @@ def propose_ticket(desk: DeskState, ticket: TradeTicket) -> TradeTicket:
     desk.tickets.insert(0, ticket)
     desk.tickets = desk.tickets[:200]
     save_desk(desk)
+
+    if ticket.status == "risk_accepted":
+        try:
+            from .security_intelligence import approval_required, create_approval
+
+            if approval_required("ticket", ticket.notional):
+                create_approval(
+                    "ticket",
+                    ticket.ticket_id,
+                    notional=ticket.notional,
+                    requester=ticket.agent,
+                    context={"pair": ticket.pair, "side": ticket.side, "venue_id": ticket.venue_id},
+                )
+        except Exception:
+            pass
+
     return ticket
 
 

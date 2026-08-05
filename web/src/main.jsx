@@ -103,6 +103,11 @@ function App() {
     amount: 10,
     note: "rebalance",
   });
+  const [secCareers, setSecCareers] = useState([]);
+  const [secUseCases, setSecUseCases] = useState([]);
+  const [secCapabilities, setSecCapabilities] = useState([]);
+  const [approvals, setApprovals] = useState([]);
+  const [approverId, setApproverId] = useState("alice");
   const [ticketForm, setTicketForm] = useState({
     venue_id: "kuru",
     pair: "MON/USDC",
@@ -143,26 +148,31 @@ function App() {
 
   const refresh = useCallback(async () => {
     try {
-      const [h, j, p, d, q, wp, rc, dk, hm, co, eco, ai, wl, sb, company, brk, gate, vlts] = await Promise.all([
-        api("/health"),
-        api("/judge"),
-        api("/protocols"),
-        api("/deployment"),
-        api("/academy/quests"),
-        api("/workspace/projects"),
-        api("/receipts/recent?n=12"),
-        api("/desk"),
-        api(`/home?network=${network}`),
-        api(`/intelligence/coach?network=${network}`),
-        api(`/ecosystem?network=${network === "monad-mainnet" ? "monad-mainnet" : "monad-testnet"}`),
-        api("/ai"),
-        api("/wallets"),
-        api("/sandbox"),
-        api("/company"),
-        api("/brokers"),
-        api("/live-gate"),
-        api("/vaults"),
-      ]);
+      const [h, j, p, d, q, wp, rc, dk, hm, co, eco, ai, wl, sb, company, brk, gate, vlts, careers, useCases, caps, appr] =
+        await Promise.all([
+          api("/health"),
+          api("/judge"),
+          api("/protocols"),
+          api("/deployment"),
+          api("/academy/quests"),
+          api("/workspace/projects"),
+          api("/receipts/recent?n=12"),
+          api("/desk"),
+          api(`/home?network=${network}`),
+          api(`/intelligence/coach?network=${network}`),
+          api(`/ecosystem?network=${network === "monad-mainnet" ? "monad-mainnet" : "monad-testnet"}`),
+          api("/ai"),
+          api("/wallets"),
+          api("/sandbox"),
+          api("/company"),
+          api("/brokers"),
+          api("/live-gate"),
+          api("/vaults"),
+          api("/security/careers"),
+          api("/security/use-cases"),
+          api("/security/capabilities"),
+          api("/security/approvals"),
+        ]);
       setHealth(h);
       setJudge(j);
       setProtocols(p);
@@ -182,6 +192,10 @@ function App() {
       setBrokers(brk);
       setLiveGate(gate);
       setVaults(vlts.vaults || []);
+      setSecCareers(careers.careers || []);
+      setSecUseCases(useCases.use_cases || []);
+      setSecCapabilities(caps.capabilities || []);
+      setApprovals(appr.approvals || []);
       if (dk?.marks?.["MON/USDC"]) {
         setTicketForm((f) => ({ ...f, limit_price: dk.marks["MON/USDC"] }));
       }
@@ -364,7 +378,7 @@ function App() {
       });
       setDesk(data.desk);
       if (data.ticket?.status === "risk_accepted") {
-        // optional: leave for user to fill
+        setApprovals((await api("/security/approvals")).approvals || []);
       }
       setDeskArena(null);
     } catch (e) {
@@ -513,6 +527,7 @@ function App() {
         body: JSON.stringify({ connector_id: vaultConnectorId }),
       });
       setVaults((await api("/vaults")).vaults || []);
+      setApprovals((await api("/security/approvals")).approvals || []);
     } catch (e) {
       setErr(String(e.message || e));
     } finally {
@@ -547,6 +562,23 @@ function App() {
         body: JSON.stringify(ledgerForm),
       });
       setVaults((await api("/vaults")).vaults || []);
+      setApprovals((await api("/security/approvals")).approvals || []);
+    } catch (e) {
+      setErr(String(e.message || e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function decideApproval(approvalId, role, approved) {
+    setBusy(true);
+    setErr("");
+    try {
+      await api(`/security/approvals/${approvalId}/decide`, {
+        method: "POST",
+        body: JSON.stringify({ role, approver_id: approverId || "operator", approved }),
+      });
+      setApprovals((await api("/security/approvals")).approvals || []);
     } catch (e) {
       setErr(String(e.message || e));
     } finally {
@@ -1033,6 +1065,7 @@ function App() {
           ["ai", "AI"],
           ["desk", "DESK"],
           ["vaults", "VAULTS"],
+          ["security", "SECURITY"],
           ["academy", "ACADEMY"],
           ["studio", "STUDIO"],
           ["ide", "IDE"],
@@ -2595,6 +2628,104 @@ function App() {
                   </div>
                 </>
               )}
+            </article>
+          </div>
+        </section>
+      )}
+
+      {tab === "security" && (
+        <section className="panel">
+          <div className="grid3 vault-grid">
+            <article>
+              <label>PENDING APPROVALS</label>
+              <p className="muted sm">
+                Agents propose. Roles approve. Receipts remember. Large tickets, ledger transfers, and every new
+                vault connector route here for a role-scoped sign-off — informational governance, never a live
+                execution switch.
+              </p>
+              <input
+                value={approverId}
+                onChange={(e) => setApproverId(e.target.value)}
+                placeholder="Your approver id (e.g. alice)"
+              />
+              <div className="plans">
+                {approvals.length === 0 && <p className="muted sm">No approvals recorded yet.</p>}
+                {approvals.map((a) => (
+                  <div
+                    key={a.approval_id}
+                    className={`plan ${a.status === "approved" ? "yes" : a.status === "rejected" ? "no" : ""}`}
+                  >
+                    <header>
+                      <b>
+                        {a.kind} · {a.ref_id}
+                      </b>
+                      <Pill ok={a.status === "approved"} warn={a.status === "pending"}>
+                        {a.status}
+                      </Pill>
+                    </header>
+                    <p>
+                      notional {Number(a.notional).toFixed(2)} · requested by {a.requester}
+                    </p>
+                    <p className="muted sm">roles required: {a.roles_required.join(", ")}</p>
+                    {a.status === "pending" &&
+                      a.roles_required
+                        .filter((r) => !a.decisions?.[r])
+                        .map((r) => (
+                          <div key={r} className="chips">
+                            <button type="button" className="ghost" disabled={busy} onClick={() => decideApproval(a.approval_id, r, true)}>
+                              Approve as {r}
+                            </button>
+                            <button type="button" className="ghost" disabled={busy} onClick={() => decideApproval(a.approval_id, r, false)}>
+                              Reject as {r}
+                            </button>
+                          </div>
+                        ))}
+                  </div>
+                ))}
+              </div>
+            </article>
+
+            <article className="result">
+              <label>ROLE TAXONOMY</label>
+              <p className="muted sm">Who can approve what — desk trading, vault governance, and platform security.</p>
+              <div className="proto-list" style={{ maxHeight: 460 }}>
+                {secCareers.map((c) => (
+                  <div key={c.id} className="proto">
+                    <b>
+                      {c.title} · {c.team}
+                    </b>
+                    <span className="muted"> · {c.stage}</span>
+                    <p className="muted sm">{c.summary}</p>
+                    {c.approval_scope?.length > 0 && (
+                      <p className="muted sm">approves: {c.approval_scope.join(", ")}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </article>
+
+            <article className="result">
+              <label>USE-CASE WORKFLOWS</label>
+              <div className="proto-list" style={{ maxHeight: 220 }}>
+                {secUseCases.map((u) => (
+                  <div key={u.id} className="proto">
+                    <b>{u.title}</b>
+                    <p className="muted sm">{u.problem}</p>
+                    <p className="muted sm">roles: {u.roles.join(", ") || "—"}</p>
+                  </div>
+                ))}
+              </div>
+
+              <label>CAPABILITY MATRIX</label>
+              <div className="proto-list" style={{ maxHeight: 220 }}>
+                {secCapabilities.map((cap) => (
+                  <div key={cap.domain} className="proto">
+                    <b>{cap.domain}</b>
+                    <p className="muted sm">{cap.capabilities.join(", ")}</p>
+                    <p className="muted sm">maturity: {cap.maturity.join(" → ")}</p>
+                  </div>
+                ))}
+              </div>
             </article>
           </div>
         </section>
