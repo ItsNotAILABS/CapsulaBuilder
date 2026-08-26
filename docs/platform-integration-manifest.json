@@ -1,6 +1,8 @@
 {
   "schema": "medina.two-product-platform.v1",
   "status": "source-integration",
+  "federationAuthority": "ItsNotAILABS/nexus",
+  "capabilitySurface": "ecosystem.surface.json",
   "publicProducts": [
     {
       "id": "monadbuilder-plus",
@@ -30,6 +32,32 @@
     "Blockchain adapters",
     "Cloudflare federation",
     "GitHub release automation"
+  ],
+  "canonicalDependencies": {
+    "federation": "ItsNotAILABS/nexus",
+    "memory": "ItsNotAILABS/MedinaMemorySystems",
+    "executionCapsule": "ItsNotAILABS/CAPSULA",
+    "boundedCompute": "ItsNotAILABS/MatDaemon",
+    "internalModelFamily": "ItsNotAILABS/NOVA-private-root",
+    "spectralModelRuntime": "ItsNotAILABS/AURO",
+    "languageModelRuntime": "ItsNotAILABS/Auro14B",
+    "connectorControl": "ItsNotAILABS/nova-connector-control-plane",
+    "externalConnectors": "ItsNotAILABS/x-mcp-skills",
+    "workflow": "ItsNotAILABS/organism-bots-mcp-server",
+    "marketExecutionPlanning": "ItsNotAILABS/PARRALAX-AIHFTFUND",
+    "clearing": "ItsNotAILABS/PARALLAX-Exchange-Clearinghouse",
+    "syntheticCognition": "ItsNotAILABS/Chimeria",
+    "researchWorkbench": "ItsNotAILABS/ResearchersHub",
+    "researchPublication": "ItsNotAILABS/PRODUCTION-",
+    "security": "ItsNotAILABS/CyberSecurity-AI"
+  },
+  "authorityRules": [
+    "Product surfaces compose upstream capabilities but do not become their canonical authority.",
+    "Cross-repository discovery, compatibility, plans, handoffs and receipt correlation are governed by NEXUS.",
+    "Memory contracts come from MedinaMemorySystems rather than product-local duplicate memory implementations.",
+    "Model-family semantics remain upstream; product adapters may bind them without forking their authority.",
+    "Wallet signing remains external and owner-controlled.",
+    "Research artifacts cite runtime evidence rather than substituting for runtime validation."
   ],
   "legacy": {
     "artifacts/monad-mobile": {
