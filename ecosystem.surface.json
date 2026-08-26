@@ -1,0 +1,83 @@
+{
+  "schema": "nexus.capability.v1",
+  "component": "monadbuilder-thesis",
+  "repository": "ItsNotAILABS/CapsulaBuilder",
+  "role": "public-product-and-local-sovereign-control-surface",
+  "products": ["MonadBuilder+", "THESIS Agent Desktop"],
+  "actions": [
+    "product.web.compose",
+    "product.project.publish",
+    "thesis.mcp.lifecycle",
+    "thesis.approval.review",
+    "thesis.receipt.inspect",
+    "thesis.adapter.invoke",
+    "thesis.federation.status",
+    "thesis.release.prepare"
+  ],
+  "risk_tiers": {
+    "product.web.compose": "write-bounded",
+    "product.project.publish": "governed",
+    "thesis.mcp.lifecycle": "local-governed",
+    "thesis.approval.review": "owner-confirmation",
+    "thesis.receipt.inspect": "read",
+    "thesis.adapter.invoke": "adapter-defined",
+    "thesis.federation.status": "read-sensitive",
+    "thesis.release.prepare": "governed"
+  },
+  "produces": [
+    "nexus.task.v1",
+    "nexus.approval.v1",
+    "nexus.denial.v1",
+    "nexus.execution-receipt.v1",
+    "nexus.artifact.v1",
+    "nexus.handoff.v1",
+    "nexus.health.v1",
+    "nexus.release-evidence.v1"
+  ],
+  "consumes": [
+    "nexus.capability.v1",
+    "nexus.identity-ref.v1",
+    "nexus.plan.v1",
+    "nexus.policy-decision.v1",
+    "nexus.context-pack.v1",
+    "nexus.budget.v1",
+    "nexus.quota.v1",
+    "nexus.feature-flag.v1",
+    "nexus.secret-ref.v1"
+  ],
+  "canonical_dependencies": {
+    "federation": "ItsNotAILABS/nexus",
+    "memory": "ItsNotAILABS/MedinaMemorySystems",
+    "execution_capsule": "ItsNotAILABS/CAPSULA",
+    "compute": "ItsNotAILABS/MatDaemon",
+    "internal_intelligence": "ItsNotAILABS/NOVA-private-root",
+    "model_runtime": "ItsNotAILABS/AURO",
+    "language_model_runtime": "ItsNotAILABS/Auro14B",
+    "connector_control": "ItsNotAILABS/nova-connector-control-plane",
+    "external_connectors": "ItsNotAILABS/x-mcp-skills",
+    "workflow": "ItsNotAILABS/organism-bots-mcp-server",
+    "market_execution": "ItsNotAILABS/PARRALAX-AIHFTFUND",
+    "clearing": "ItsNotAILABS/PARALLAX-Exchange-Clearinghouse",
+    "synthetic_cognition": "ItsNotAILABS/Chimeria",
+    "research_workbench": "ItsNotAILABS/ResearchersHub",
+    "research_publication": "ItsNotAILABS/PRODUCTION-",
+    "security": "ItsNotAILABS/CyberSecurity-AI"
+  },
+  "limits": {
+    "private_key_storage": false,
+    "seed_phrase_storage": false,
+    "silent_wallet_signing": false,
+    "silent_trade_execution": false,
+    "implicit_upstream_authority": false,
+    "cross_tenant_authority": false,
+    "unreceipted_sensitive_execution": false,
+    "third_public_product": false
+  },
+  "proof": {
+    "state": "source-and-local-validation",
+    "external_deployment_requires_separate_evidence": true,
+    "signed_installers_require_separate_evidence": true,
+    "independent_assessment_requires_separate_evidence": true
+  },
+  "authority": "ItsNotAILABS/nexus"
+}
