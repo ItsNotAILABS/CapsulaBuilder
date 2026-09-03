@@ -25,6 +25,17 @@ def request():
     )
 
 
+def test_metropolis_pack():
+    from thesis_forge.metropolis import HACKATHON, pack
+
+    p = pack()
+    assert p["ok"] is True
+    assert p["hackathon"]["name"] == "Metropolis"
+    assert p["hackathon"]["chain_id_mainnet"] == 143
+    assert p["track_fit"]["owner_signs"] is True
+    assert HACKATHON["url"].startswith("https://www.monad.xyz")
+
+
 def test_network_constants():
     t = get_network("monad-testnet")
     m = get_network("monad-mainnet")

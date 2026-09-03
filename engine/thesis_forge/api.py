@@ -115,6 +115,7 @@ from .ecosystem_laws import (
 )
 from .live_feed import landing_feed
 from .competition import competition_pack, run_win_path, scorecard_live
+from .metropolis import pack as metropolis_pack
 from .platform import get_app, invoke_app, list_apps, platform_status
 from .engines import engine_catalog, get_engine, list_engines, run_engine
 from .engines.orchestrator import run_cloud_pipeline
@@ -1829,6 +1830,12 @@ def deployment_record(record: DeploymentRecord):
 def competition(network: str = Query("monad-testnet")):
     """Spark competition pack — personal problem, scorecard, demo script."""
     return competition_pack(network)
+
+
+@app.get("/metropolis")
+def metropolis():
+    """Monad Foundation Metropolis (1 Sep–13 Oct 2026) — finance/trading track pack."""
+    return metropolis_pack()
 
 
 @app.get("/competition/scorecard")
