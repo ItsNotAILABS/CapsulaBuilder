@@ -1,7 +1,7 @@
 {
   "schema": "kiln.project.v1",
   "projectId": "capsulabuilder",
-  "kIlN": "ItsNotAILABS/KILN",
+  "kiln": "ItsNotAILABS/KILN",
   "repository": "ItsNotAILABS/CapsulaBuilder",
   "workspace": "monadbuilder-thesis",
   "lane": "monad",
