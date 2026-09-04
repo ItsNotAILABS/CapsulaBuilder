@@ -1,0 +1,16 @@
+{
+  "schema": "kiln.project.v1",
+  "projectId": "capsulabuilder",
+  "kiln": "ItsNotAILABS/KILN",
+  "repository": "ItsNotAILABS/CapsulaBuilder",
+  "workspace": "monadbuilder-thesis",
+  "lane": "monad",
+  "mcpEndpoint": "http://127.0.0.1:8081",
+  "defaultBranch": "main",
+  "workingBranch": "codex/kiln-integration",
+  "authority": "Agents propose. Policy evaluates. Owners approve. Wallets sign. Receipts remember.",
+  "workSurfaces": ["artifacts/monad-builder", "artifacts/mcp-bridge", "desktop", "contracts", "docs", "receipts"],
+  "checks": ["pnpm run typecheck", "pnpm -r --filter './artifacts/**' --if-present run typecheck", "python scripts/validate_platform_maturity.py"],
+  "sideEffects": ["github-push", "pull-request", "wallet-signing", "monad-deployment"],
+  "approvalRequired": true
+}
