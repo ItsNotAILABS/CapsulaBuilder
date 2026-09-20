@@ -135,8 +135,7 @@ export function PolyglotHub({ api, network, busy: parentBusy, onNavigate, onRunS
           <span className="eyebrow">POLYGLOT INTEL · JULIA · NODE · PYTHON · WASM · WEBGPU</span>
           <h3>Embedded intelligence across languages</h3>
           <p className="muted sm">
-            Julia risk/spectral/gas · Node agents/WASM · Python intel · browser WebGPU/WASM ·
-            Solidity on Monad · PowerShell ops scripts.
+            AI is racing to build new data centres while the GPUs we already have sit at 5% utilisation. IOChain turns that idle hardware into a trustable AI inference infrastructure, settled on Solana. Developers publish models, deployers run them, investors hold fractional shares in the models they back. Pay-per-call, on-chain, peer to peer. Ships with a CLI, Tauri desktop, web app, and TS + Python SDKs.
           </p>
           <p className="muted sm">
             Julia <b>{catalog?.julia?.available ? "ON" : "off"}</b> · Node{" "}
