@@ -10,6 +10,7 @@ import { Tools } from "./Tools.jsx";
 import { Terminal } from "./Terminal.jsx";
 import { HybridHub } from "./HybridHub.jsx";
 import { BuilderHome } from "./BuilderHome.jsx";
+import { JevDesk } from "./JevDesk.jsx";
 import { AgentPanel } from "./AgentPanel.jsx";
 import { MicButton } from "./MicButton.jsx";
 import { api, API_BASE } from "./api.js";
@@ -1082,6 +1083,7 @@ function App() {
           ["home", "DAILY"],
           ["ai", "AI"],
           ["desk", "DESK"],
+          ["jev", "JEV"],
           ["vaults", "VAULTS"],
           ["security", "SECURITY"],
           ["portfolio", "PORTFOLIO"],
@@ -1112,6 +1114,8 @@ function App() {
       {tab === "agent" && (
         <AgentPanel api={api} network={network} busy={busy} onNavigate={setTab} />
       )}
+
+      {tab === "jev" && <JevDesk api={api} network={network} busy={busy} />}
 
       {tab === "live" && !systemRun && (
         <div className="start-here">

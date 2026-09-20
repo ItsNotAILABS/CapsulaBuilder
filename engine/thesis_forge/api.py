@@ -1849,6 +1849,34 @@ def demo_win_path(network: str = Query("monad-testnet")):
     return run_win_path(network)
 
 
+class JevRunBody(BaseModel):
+    goal: str = "safe MON/USDC swap"
+    reckless: bool = False
+    network: str = "monad-testnet"
+
+
+class JevSignBody(BaseModel):
+    receipt_hash: str = ""
+    network: str = "monad-testnet"
+
+
+@app.post("/jev/run")
+def jev_run(body: JevRunBody):
+    """JEV desk: NOVA holds goal → policy REJECT or owner-sign."""
+    from .jev_desk import run_cycle
+
+    return run_cycle(body.goal, reckless=body.reckless, network=body.network)
+
+
+@app.post("/jev/sign")
+def jev_sign(body: JevSignBody):
+    from .jev_desk import owner_sign
+
+    if not (body.receipt_hash or "").strip():
+        raise HTTPException(400, "receipt_hash required")
+    return owner_sign(body.receipt_hash.strip(), network=body.network)
+
+
 @app.get("/judge")
 def judge_panel(network: str = Query("monad-testnet")):
     """Spark judge / AI judging agent proof panel (competition-winner grade)."""

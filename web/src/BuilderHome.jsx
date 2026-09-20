@@ -77,6 +77,10 @@ export function BuilderHome({ api, network, busy: parentBusy, onNavigate, onRunS
           body: JSON.stringify({ agent: "seatbelt", action: "brief", network }),
         });
         flash(data?.result?.summary || "Edge seatbelt ok");
+      } else if (id === "jev") {
+        if (onNavigate) onNavigate("jev");
+        flash("JEV desk");
+        return;
       } else if (id === "agent") {
         data = await api("/agent/step", {
           method: "POST",
@@ -182,6 +186,9 @@ export function BuilderHome({ api, network, busy: parentBusy, onNavigate, onRunS
             Refresh
           </button>
           <MicButton label="STT" disabled={disabled} onPartial={setSttPartial} onText={onDictate} />
+          <button type="button" className="ghost" onClick={() => onNavigate?.("jev")}>
+            JEV desk
+          </button>
           <button type="button" className="ghost" onClick={() => onNavigate?.("agent")}>
             Agent
           </button>
