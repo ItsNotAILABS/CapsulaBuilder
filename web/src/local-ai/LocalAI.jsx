@@ -18,6 +18,8 @@ export function LocalAI({ api, network, busy: parentBusy, onNavigate, onRunSyste
   const [inf, setInf] = useState(Local.inferenceStatus());
   const [modelCfg, setModelCfg] = useState(() => Local.loadInferenceSettings());
   const [probe, setProbe] = useState(null);
+  const [gpu, setGpu] = useState(null);
+  const [bench, setBench] = useState(null);
   const [mem, setMem] = useState(null);
   const [graph, setGraph] = useState(null);
   const [sec, setSec] = useState(null);
@@ -485,7 +487,88 @@ export function LocalAI({ api, network, busy: parentBusy, onNavigate, onRunSyste
                 onChange={(e) => setModelCfg((c) => ({ ...c, task: e.target.value }))}
               />
             </label>
+            <label className="field">
+              <span>Device</span>
+              <select
+                value={modelCfg.device || "auto"}
+                onChange={(e) => setModelCfg((c) => ({ ...c, device: e.target.value }))}
+              >
+                <option value="auto">auto (WebGPU if available)</option>
+                <option value="webgpu">webgpu</option>
+                <option value="wasm">wasm</option>
+              </select>
+            </label>
+            <label className="field">
+              <span>dtype</span>
+              <select
+                value={modelCfg.dtype || "fp32"}
+                onChange={(e) => setModelCfg((c) => ({ ...c, dtype: e.target.value }))}
+              >
+                <option value="fp32">fp32</option>
+                <option value="fp16">fp16 (needs shader-f16)</option>
+                <option value="q8">q8</option>
+                <option value="q4">q4</option>
+              </select>
+            </label>
           </div>
+
+          <label>EXECUTION BACKEND</label>
+          <div className="kv">
+            <span>Running on</span>
+            <b>
+              {inf?.device?.active
+                ? `${inf.device.active}${inf.device.dtype ? ` / ${inf.device.dtype}` : ""}`
+                : "— load a model —"}
+            </b>
+          </div>
+          {inf?.device?.fellBackToWasm && (
+            <p className="muted sm">
+              WebGPU was requested but failed to initialize — fell back to WASM. See the event log
+              for the adapter error.
+            </p>
+          )}
+          {gpu && (
+            <div className="kv">
+              <span>Adapter</span>
+              <b>
+                {gpu.available
+                  ? `${gpu.vendor}${gpu.architecture ? ` · ${gpu.architecture}` : ""}${gpu.fp16 ? " · fp16" : ""}`
+                  : gpu.reason}
+              </b>
+            </div>
+          )}
+          <div className="chips tight">
+            <button
+              type="button"
+              className="ghost"
+              onClick={async () => setGpu(await Local.probeWebGPU())}
+            >
+              Probe WebGPU
+            </button>
+            <button
+              type="button"
+              className="ghost"
+              onClick={async () => {
+                try {
+                  const b = await Local.benchmarkInference({ samples: 12 });
+                  setBench(b);
+                  setInf(Local.inferenceStatus());
+                  flash(`${b.device} · ${b.msPerEmbedding}ms per embedding`);
+                } catch (e) {
+                  flash(String(e.message || e));
+                }
+              }}
+            >
+              Benchmark 12 embeddings
+            </button>
+          </div>
+          {bench && (
+            <p className="muted sm">
+              {bench.samples} embeddings on <b>{bench.device}</b>/{bench.dtype} ·{" "}
+              {bench.msPerEmbedding}ms each · {bench.embeddingsPerSecond}/sec
+              {bench.adapter ? ` · ${bench.adapter}` : ""}
+            </p>
+          )}
           <div className="chips tight model-toggles">
             <label className="toggle">
               <input

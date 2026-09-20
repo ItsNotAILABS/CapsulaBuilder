@@ -22,6 +22,10 @@ export {
   resetEmbedder,
   applyTransformersEnv,
   probeLocalModel,
+  probeWebGPU,
+  resolveDevice,
+  deviceStatus,
+  benchmarkInference,
   MODEL_PRESETS,
 } from "./inference.js";
 

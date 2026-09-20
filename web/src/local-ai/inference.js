@@ -54,6 +54,16 @@ const DEFAULT_SETTINGS = {
   wasmPaths: "",
   /** Force local-only (offline): remote off, local on */
   offlineOnly: false,
+  /**
+   * Execution backend: "auto" | "webgpu" | "wasm".
+   * "auto" uses WebGPU when the browser exposes a usable adapter, else WASM.
+   */
+  device: "auto",
+  /**
+   * Weight precision. fp32 is the safe default on WebGPU; fp16 needs the
+   * adapter to report the "shader-f16" feature. q8/q4 shrink download size.
+   */
+  dtype: "fp32",
 };
 
 let extractor = null;
@@ -62,6 +72,11 @@ let loadState = "idle"; // idle | loading | ready | error
 let loadError = null;
 let loadProgress = 0;
 let lastEnvApplied = null;
+let activeDevice = null; // backend the loaded pipeline actually runs on
+let activeDtype = null;
+let deviceFellBack = false; // true when WebGPU was requested but WASM was used
+let lastDeviceProbe = null;
+let lastBenchmark = null;
 
 export function defaultInferenceSettings() {
   return { ...DEFAULT_SETTINGS };
@@ -132,6 +147,71 @@ export function applyTransformersEnv(env, settings) {
   return lastEnvApplied;
 }
 
+/**
+ * Probe the browser for a usable WebGPU adapter.
+ *
+ * `navigator.gpu` existing is not sufficient — requestAdapter() returns null
+ * when no adapter is available (headless, blocklisted driver, disabled flag),
+ * so we actually request one and report what came back.
+ */
+export async function probeWebGPU() {
+  if (typeof navigator === "undefined" || !navigator.gpu) {
+    lastDeviceProbe = {
+      available: false,
+      reason: "navigator.gpu unavailable — needs Chrome/Edge 113+, or Safari 18+",
+    };
+    return lastDeviceProbe;
+  }
+  try {
+    const adapter = await navigator.gpu.requestAdapter();
+    if (!adapter) {
+      lastDeviceProbe = {
+        available: false,
+        reason: "no WebGPU adapter — driver blocklisted or GPU unavailable",
+      };
+      return lastDeviceProbe;
+    }
+    const info = (await adapter.requestAdapterInfo?.()) || adapter.info || {};
+    lastDeviceProbe = {
+      available: true,
+      vendor: info.vendor || "unknown",
+      architecture: info.architecture || "",
+      description: info.description || "",
+      // fp16 halves memory traffic but only when the adapter advertises it
+      fp16: adapter.features?.has?.("shader-f16") === true,
+      maxBufferSize: adapter.limits?.maxBufferSize ?? null,
+      maxStorageBufferBindingSize: adapter.limits?.maxStorageBufferBindingSize ?? null,
+    };
+    return lastDeviceProbe;
+  } catch (e) {
+    lastDeviceProbe = { available: false, reason: String(e?.message || e) };
+    return lastDeviceProbe;
+  }
+}
+
+/** Resolve the "auto" setting into a concrete transformers.js device string. */
+export async function resolveDevice(settings) {
+  const want = (settings?.device || "auto").toLowerCase();
+  if (want === "wasm" || want === "cpu") return { device: "wasm", probe: lastDeviceProbe };
+  const probe = await probeWebGPU();
+  if (want === "webgpu") {
+    // explicit request — honor it even if the probe is unsure; load() will fall back on throw
+    return { device: "webgpu", probe };
+  }
+  return { device: probe.available ? "webgpu" : "wasm", probe };
+}
+
+export function deviceStatus() {
+  return {
+    configured: loadInferenceSettings().device,
+    active: activeDevice,
+    dtype: activeDtype,
+    fellBackToWasm: deviceFellBack,
+    probe: lastDeviceProbe,
+    benchmark: lastBenchmark,
+  };
+}
+
 export function inferenceStatus() {
   const s = loadInferenceSettings();
   return {
@@ -143,8 +223,16 @@ export function inferenceStatus() {
     progress: loadProgress,
     error: loadError,
     ready: loadState === "ready" && !!extractor,
-    locality: "browser-only",
+    locality: activeDevice === "webgpu" ? "browser-webgpu" : "browser-only",
     capabilities: ["feature-extraction", "semantic-recall", "research-ranking", "custom-models"],
+    device: {
+      configured: s.device,
+      active: activeDevice,
+      dtype: activeDtype,
+      fellBackToWasm: deviceFellBack,
+      probe: lastDeviceProbe,
+      benchmark: lastBenchmark,
+    },
     settings: {
       localModelPath: s.localModelPath,
       allowRemoteModels: s.offlineOnly ? false : s.allowRemoteModels,
@@ -152,6 +240,8 @@ export function inferenceStatus() {
       useBrowserCache: s.useBrowserCache,
       wasmPaths: s.wasmPaths || null,
       offlineOnly: !!s.offlineOnly,
+      device: s.device,
+      dtype: s.dtype,
     },
     envApplied: lastEnvApplied,
     presets: MODEL_PRESETS,
@@ -171,6 +261,9 @@ export function resetEmbedder() {
   loadState = "idle";
   loadError = null;
   loadProgress = 0;
+  activeDevice = null;
+  activeDtype = null;
+  deviceFellBack = false;
 }
 
 /**
@@ -210,19 +303,44 @@ export async function ensureEmbedder({ onProgress, force = false, settings: over
     });
 
     const task = settings.task || "feature-extraction";
-    extractor = await pipeline(task, modelId, {
-      progress_callback: (p) => {
-        if (p?.progress != null) loadProgress = Math.round(Number(p.progress));
-        else if (p?.status === "done" || p?.status === "ready") loadProgress = 100;
-        onProgress?.(p);
-      },
-    });
+    const progress_callback = (p) => {
+      if (p?.progress != null) loadProgress = Math.round(Number(p.progress));
+      else if (p?.status === "done" || p?.status === "ready") loadProgress = 100;
+      onProgress?.(p);
+    };
+
+    const { device: wanted, probe } = await resolveDevice(settings);
+    // fp16 is only safe when the adapter advertises shader-f16
+    let dtype = settings.dtype || DEFAULT_SETTINGS.dtype;
+    if (wanted === "webgpu" && dtype === "fp16" && probe?.fp16 !== true) dtype = "fp32";
+
+    deviceFellBack = false;
+    try {
+      extractor = await pipeline(task, modelId, { device: wanted, dtype, progress_callback });
+      activeDevice = wanted;
+    } catch (gpuErr) {
+      // WebGPU can fail at init on blocklisted drivers or unsupported ops —
+      // fall back to WASM rather than leaving the app with no embedder.
+      if (wanted !== "webgpu") throw gpuErr;
+      deviceFellBack = true;
+      await logEvent("inference.device_fallback", {
+        message: `webgpu failed, falling back to wasm · ${String(gpuErr?.message || gpuErr)}`,
+      });
+      loadProgress = 0;
+      extractor = await pipeline(task, modelId, { device: "wasm", dtype: "fp32", progress_callback });
+      activeDevice = "wasm";
+      dtype = "fp32";
+    }
+    activeDtype = dtype;
 
     loadedModelId = modelId;
     loadState = "ready";
     loadProgress = 100;
     await logEvent("inference.ready", {
-      message: `model ready · ${modelId}`,
+      message: `model ready · ${modelId} · ${activeDevice}/${activeDtype}${deviceFellBack ? " (fell back)" : ""}`,
+      device: activeDevice,
+      dtype: activeDtype,
+      fellBackToWasm: deviceFellBack,
       offlineOnly: !!settings.offlineOnly,
       localModelPath: settings.localModelPath,
     });
@@ -246,6 +364,50 @@ export async function embed(text, { ensure = true } = {}) {
   const out = await extractor(input, { pooling: "mean", normalize: true });
   const data = out?.data || out;
   return Array.from(data);
+}
+
+/**
+ * Time N embeddings on the currently loaded backend.
+ *
+ * Reports the device that actually served the run, so the number can be
+ * attributed to a backend rather than asserted. A first warmup pass is
+ * discarded — on WebGPU the initial call includes shader compilation.
+ */
+export async function benchmarkInference({ samples = 12, warmup = true } = {}) {
+  await ensureEmbedder();
+  if (!extractor) throw new Error("embedder not ready");
+
+  const corpus = Array.from(
+    { length: samples },
+    (_, i) => `benchmark sample ${i}: governed agent inference on idle hardware`
+  );
+
+  if (warmup) await embed(corpus[0], { ensure: false });
+
+  const t0 = performance.now();
+  for (const text of corpus) {
+    // eslint-disable-next-line no-await-in-loop
+    await embed(text, { ensure: false });
+  }
+  const elapsedMs = performance.now() - t0;
+
+  lastBenchmark = {
+    device: activeDevice,
+    dtype: activeDtype,
+    fellBackToWasm: deviceFellBack,
+    model: loadedModelId,
+    samples,
+    elapsedMs: Math.round(elapsedMs),
+    msPerEmbedding: Number((elapsedMs / samples).toFixed(2)),
+    embeddingsPerSecond: Number((samples / (elapsedMs / 1000)).toFixed(2)),
+    adapter: lastDeviceProbe?.available ? lastDeviceProbe.vendor : null,
+    at: new Date().toISOString(),
+  };
+  await logEvent("inference.benchmark", {
+    message: `${samples} embeddings on ${activeDevice} · ${lastBenchmark.msPerEmbedding}ms each`,
+    ...lastBenchmark,
+  });
+  return lastBenchmark;
 }
 
 export async function embedBatch(texts, { ensure = true } = {}) {
