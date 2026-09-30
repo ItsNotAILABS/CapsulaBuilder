@@ -12,6 +12,8 @@ import { HybridHub } from "./HybridHub.jsx";
 import { BuilderHome } from "./BuilderHome.jsx";
 import { AgentPanel } from "./AgentPanel.jsx";
 import { MicButton } from "./MicButton.jsx";
+import { GoogleAuthProvider } from "./GoogleAuth.jsx";
+import { GoogleSignIn } from "./GoogleSignIn.jsx";
 import { api, API_BASE } from "./api.js";
 import "./style.css";
 
@@ -1063,6 +1065,9 @@ function App() {
           API <code>{API_BASE || "/"}</code>
           {systemRun?.ok ? " · system OK" : systemRun ? " · system ran" : ""}
           {desk ? ` · desk ${Number(desk.equity || 0).toFixed(0)}` : ""}
+        </span>
+        <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center" }}>
+          <GoogleSignIn />
         </span>
       </div>
 
@@ -3250,4 +3255,8 @@ function App() {
   );
 }
 
-createRoot(document.getElementById("root")).render(<App />);
+createRoot(document.getElementById("root")).render(
+  <GoogleAuthProvider>
+    <App />
+  </GoogleAuthProvider>
+);

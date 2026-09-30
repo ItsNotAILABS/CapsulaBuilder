@@ -10,7 +10,9 @@ export default defineConfig({
       "/api": {
         target: process.env.VITE_PROXY_TARGET || "http://127.0.0.1:8043",
         changeOrigin: true,
-        rewrite: (p) => p.replace(/^\/api/, ""),
+        // No path rewrite: the api-server mounts everything under /api,
+        // matching production's reverse-proxy behavior. Stripping /api here
+        // 404s every call in dev (e.g. /api/auth/me -> /auth/me).
       },
     },
   },
